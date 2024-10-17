@@ -5,8 +5,8 @@
 // =========== НАСТРОЙКИ ===========
 bool DEBUG = 0; // 0 = off, 1 = on отладочный режим
 #define DISPLAY 0 // 0 = off, 1 = on отображение на дисплее
-#define INVERTEDWHEEL 0 // 0 = off, 1 = on инверсия Рулевого колеса
-#define INVERTEDPEDAL 0 // 0 = off, 1 = on инверсия Педалей
+#define INVERTEDWHEEL 1 // 0 = off, 1 = on инверсия Рулевого колеса
+#define INVERTEDPEDAL 1 // 0 = off, 1 = on инверсия Педалей
 #define ENC_TYPE 1    // тип энкодера, 0 или 1
 
 
@@ -86,9 +86,14 @@ void loop() {
             DEBUG = 0;
             calibrate(0);
         }
-    }
-    if (!DEBUG)
+    } else {
+       if (!digitalRead(button1Pin) && button1State == 0) {
+            button1State = 1;
+            encCounter = 0;
+        }
         logicGamepad();
+    }
+        
     button1State = !digitalRead(button1Pin);
     button2State = !digitalRead(button2Pin);
 }
@@ -146,12 +151,12 @@ void logicGamepad() {
         wheel = map(wheel, -wheelMaxDeg, wheelMaxDeg, -32768, 32767);
         
         int gas, brake, clutch;
-        gas = map(analogRead(pedalGasPin), gasMin, gasMax, -128, 127);
+        gas = map(analogRead(pedalGasPin), gasMin-10, gasMax+10, -32768, 32767);
         brake = map(analogRead(pedalBrakePin), brakeMin, brakeMax, -128, 127);
         clutch = map(analogRead(pedalClutchPin), clutchMin, clutchMax, -128, 127);
-        gas = constrain(gas, -128, 127);
-        brake = constrain(brake, -128, 127);
-        clutch = constrain(clutch, -128, 127);
+        //gas = constrain(gas, -128, 127);
+        //brake = constrain(brake, -128, 127);
+        //clutch = constrain(clutch, -128, 127);
         if (INVERTEDPEDAL) {
             gas = -gas;
             brake = -brake;
@@ -159,8 +164,8 @@ void logicGamepad() {
         }
         Gamepad.xAxis(wheel);  // Устанавливаем ось X
         Gamepad.yAxis(gas);  // Устанавливаем ось Y
-        Gamepad.zAxis(brake);  // Устанавливаем ось Z
-        Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
+       // Gamepad.zAxis(brake);  // Устанавливаем ось Z
+       // Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
         Gamepad.write(); 
     }
 }

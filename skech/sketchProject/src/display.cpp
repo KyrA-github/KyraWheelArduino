@@ -1,4 +1,4 @@
-#include "display.hpp"
+#include "../inc/display.hpp"
 
 void Display::Display(int SCREEN_W, int SCREEN_H) {
     SCREEN_WIDTH = SCREEN_W;
@@ -122,10 +122,7 @@ void Display::updateLogic() {
     }
     
 }
-
-void Display::sleep() {
-}
-    
+ 
 
 
 // void Display::drawSteeringWheel(int angle) {

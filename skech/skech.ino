@@ -31,7 +31,7 @@ uint32_t timer;
 int gasMin = 0, gasMax = 0, brakeMin = 0, brakeMax = 0, clutchMin = 0, clutchMax = 0;
 int  wheelMaxDeg = 0;
 
-bool button1State = 0, button2State = 0;
+
 
 void setup() {
     pinMode(button1Pin, INPUT_PULLUP);

@@ -1,17 +1,22 @@
 #include "../inc/Pedal.hpp"
 
+// Инициализация через динамическое выделение памяти
 Pedal::Pedal(int speed, int pin) {
-    RH_ASK rf_driver(speed, pin);  
+    rf_driver = new RH_ASK(speed, pin);  
+}
+
+Pedal::~Pedal() {
+    delete rf_driver; 
 }
 
 bool Pedal::init() {
-    return rf_driver.init();
+    return rf_driver->init();  
 }
 
 bool Pedal::lisening() {
-    return rf_driver.recv(buf, &buflen);
+    return rf_driver->recv(buf, &buflen);  
 }
 
-uint8_t* Pedal::getMessage() {
-    return buf;
+int8_t* Pedal::getMessage() {
+    return buf;  
 }

@@ -31,7 +31,7 @@ uint32_t timer;
 int gasMin = 0, gasMax = 0, brakeMin = 0, brakeMax = 0, clutchMin = 0, clutchMax = 0;
 int  wheelMaxDeg = 0;
 
-
+bool button1State = false, button2State = false;
 
 void setup() {
     pinMode(button1Pin, INPUT_PULLUP);
@@ -51,6 +51,7 @@ void setup() {
         Serial.begin(9600);
     }
     Gamepad.begin();
+    Serial.begin(9600);
 }
 void encTick() {
     bool currentState = digitalRead(encoderPinA); // Чтение текущего состояния пина A энкодера
@@ -72,6 +73,7 @@ void encTick() {
 
 
 void loop() {
+    Serial.println(encCounter)
     if (!digitalRead(button2Pin) && button2State == 0){
         button2State = 1;
         DEBUG = 1;
@@ -152,7 +154,7 @@ void logicGamepad() {
         
         int gas, brake, clutch;
         gas = map(analogRead(pedalGasPin), gasMin-10, gasMax+10, -32768, 32767);
-        brake = map(analogRead(pedalBrakePin), brakeMin, brakeMax, -128, 127);
+        brake = map(analogRead(pedalBrakePin), brakeMax-10, brakeMin-15, -128, 127);
         clutch = map(analogRead(pedalClutchPin), clutchMin, clutchMax, -128, 127);
         //gas = constrain(gas, -128, 127);
         //brake = constrain(brake, -128, 127);
@@ -164,7 +166,7 @@ void logicGamepad() {
         }
         Gamepad.xAxis(wheel);  // Устанавливаем ось X
         Gamepad.yAxis(gas);  // Устанавливаем ось Y
-       // Gamepad.zAxis(brake);  // Устанавливаем ось Z
+        Gamepad.zAxis(brake);  // Устанавливаем ось Z
        // Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
         Gamepad.write(); 
     }

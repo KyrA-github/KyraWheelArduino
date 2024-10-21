@@ -1,5 +1,5 @@
 #ifndef PEDAL_HPP
-#define PEAL_HPP
+#define PEDAL_HPP
 
 #include <RH_ASK.h>
 #include <SPI.h> 
@@ -7,16 +7,17 @@
 class Pedal
 {
     public:
-        Pedal();
+        Pedal(int speed, int pin);
+        ~Pedal();
 
         bool init();
         bool lisening();
-        uint8_t* getMessage();
+        int8_t* getMessage();
 
     private:
-        uint8_t buf[5]; // Буфер для данных
-        uint8_t buflen = sizeof(buf);
-        RH_ASK rf_driver;
+        int8_t buf[5]; // Буфер для данных
+        int8_t buflen = sizeof(buf);
+        RH_ASK* rf_driver;
 };
 
 #endif // PEDAL_HPP

@@ -1,11 +1,10 @@
 #include "../inc/display.hpp"
 
-void Display::Display(int SCREEN_W, int SCREEN_H) {
-    SCREEN_WIDTH = SCREEN_W;
-    SCREEN_HEIGHT = SCREEN_HEIGHT
-    display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1)
+Display::Display(int SCREEN_W, int SCREEN_H) : SCREEN_WIDTH(SCREEN_W), SCREEN_HEIGHT(SCREEN_H), display(SCREEN_W, SCREEN_H, &Wire, -1) {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.clearDisplay();   // Инициализация дисплея с черной вкладкой
+    display.display();  // Обновляем дисплей для отображения пустого экрана
     lastTimeSave = 0;
 }
 
@@ -17,7 +16,7 @@ void Display::update() {
     display.display();
 }
 
-void Display::setConnectionIndicator(bool connected, bool show = true) {
+void Display::setConnectionIndicator(bool connected) {
     display.fillRect(SCREEN_WIDTH - 16, 0, 16, 16, BLACK);
     display.drawLine(SCREEN_WIDTH - 12, 0, SCREEN_WIDTH - 12, 6, WHITE); 
     display.drawLine(SCREEN_WIDTH - 8, 2, SCREEN_WIDTH - 8, 6, WHITE);   
@@ -31,7 +30,7 @@ void Display::setConnectionIndicator(bool connected, bool show = true) {
 void Display::setScene1(int gas, int brake, int clutch, int wheel, int HShifter, int gear) {
     display.setTextSize(1);
     display.setCursor(0, 0);
-    display.print("MAIN");
+    display.print(F("MAIN"));
     
     display.setCursor(0, 10);
     display.print("Gas:           ");
@@ -50,10 +49,10 @@ void Display::setScene1(int gas, int brake, int clutch, int wheel, int HShifter,
 
     display.setCursor(0, 40);
     display.print("Wheel:         ");
-    display.print(wheel);
+    display.print(wheel); 
 }
 
-void Display::setScene2(int gas, int brake, int clutch, int wheel) {     
+void Display::setScene2(int gas, int brake, int clutch, int wheel, int HShifter, int gear) {     
     display.setTextSize(1);   
     display.setCursor(0, 0);
     display.print("COLIBRATION");
@@ -72,7 +71,7 @@ void Display::setScene2(int gas, int brake, int clutch, int wheel) {
 
     display.setCursor(0, 40);
     display.print("Wheel:         ");
-    display.print(ads(wheel));
+    display.print(wheel);
 }
 
 void Display::setScene3(int pedalMode, int wheelMode) {
@@ -82,7 +81,7 @@ void Display::setScene3(int pedalMode, int wheelMode) {
 
 
     display.setTextSize(2); 
-    display.setCursor(0, 10);
+    display.setCursor(0, 20);
     display.print("Mode Pedal 50%:          ");
     if (pedalMode == 0) {
         display.print("OFF");
@@ -90,7 +89,7 @@ void Display::setScene3(int pedalMode, int wheelMode) {
         display.print("ON");
     }
 
-    display.setCursor(0, 10);
+    display.setCursor(0, 40);
     display.print("Mode Wheel 50%:          ");
     if (wheelMode == 0) {
         display.print("OFF");
@@ -99,7 +98,7 @@ void Display::setScene3(int pedalMode, int wheelMode) {
     }
 }
 
-void Display::drawSave(bool show = true) {
+void Display::drawSave(bool show) {
     if (show) {
         saveShow = true;
         display.setTextSize(1);
@@ -120,7 +119,6 @@ void Display::updateLogic() {
             drawSave(false);
         }
     }
-    
 }
  
 

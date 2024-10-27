@@ -73,7 +73,6 @@ void encTick() {
 
 
 void loop() {
-    Serial.println(encCounter)
     if (!digitalRead(button2Pin) && button2State == 0){
         button2State = 1;
         DEBUG = 1;
@@ -165,8 +164,8 @@ void logicGamepad() {
             clutch = -clutch;
         }
         Gamepad.xAxis(wheel);  // Устанавливаем ось X
-        Gamepad.yAxis(gas);  // Устанавливаем ось Y
-        Gamepad.zAxis(brake);  // Устанавливаем ось Z
+      //  Gamepad.yAxis(gas);  // Устанавливаем ось Y
+      //  Gamepad.zAxis(brake);  // Устанавливаем ось Z
        // Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
         Gamepad.write(); 
     }

@@ -82,16 +82,8 @@ void Display::setScene3(int pedalMode, int wheelMode) {
 
     display.setTextSize(2); 
     display.setCursor(0, 20);
-    display.print("Mode Pedal 50%:          ");
+    display.print("Mode 50%:          ");
     if (pedalMode == 0) {
-        display.print("OFF");
-    } else {
-        display.print("ON");
-    }
-
-    display.setCursor(0, 40);
-    display.print("Mode Wheel 50%:          ");
-    if (wheelMode == 0) {
         display.print("OFF");
     } else {
         display.print("ON");

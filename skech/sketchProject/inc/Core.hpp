@@ -21,6 +21,7 @@ private:
     int wheelMaxDeg = 180;
 
     int scense = 1; 
+    int mode50deg = 0;
 
 
     volatile int encCounter = 0;
@@ -29,6 +30,7 @@ private:
     int8_t* message = nullptr;
 
     bool button1State = 0, button2State = 0, button3State = 0;
+    int button1Counter = 0, button2Counter = 0, button3Counter = 0;
 
     bool INVERSALEWHEEL = false;
     bool INVERTEDPEDAL = false;

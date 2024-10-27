@@ -18,6 +18,7 @@ INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), but
         while (1);
     }
     display->clear();
+    getingFromEEPROM();
 }
 
 Core::~Core()
@@ -67,16 +68,25 @@ void Core::scenses() {
                         message[3], message[4]);
                 display->setConnectionIndicator(true);
             } else {
-                display->setScene1(-99, -99, -99, encCounter, 0, 0);
+                display->setScene1(00, 00, 00, encCounter, 0, 0);
                 display->setConnectionIndicator(false);
             }
-            display->update();
+            
 
         } else if (scense == 2){
+            display->setScene2(00, 00, 00, encCounter, 0, 0);
 
         } else if (scense == 3){ 
-
+            display->setScene3(mode50deg, 0);
+            if (button1State != digitalRead(button1Pin)) {  
+                button1State = false;
+                mode50deg = !mode50deg;
+                EEPROM.put(14, mode50deg);
+                display->drawSave(true);
+            }
         }
+        display->updateLogic();
+        display->update();
     } 
 }
 
@@ -118,17 +128,57 @@ void Core::gamepad() {
 // }
 
 void Core::savingToEEPROM() {
-
+    EEPROM.put(0, gasMin);
+    EEPROM.put(2, gasMax);
+    EEPROM.put(4, brakeMin);
+    EEPROM.put(6, brakeMax);
+    EEPROM.put(8, clutchMin);
+    EEPROM.put(10, clutchMax);
+    EEPROM.put(12, wheelMaxDeg);
+    EEPROM.put(14, mode50deg);
+    EEPROM.put(15, INVERSALEWHEEL);
 }
 
+
 void Core::getingFromEEPROM() {
-    
+    EEPROM.get(0, gasMin);
+    EEPROM.get(2, gasMax);
+    EEPROM.get(4, brakeMin);
+    EEPROM.get(6, brakeMax);
+    EEPROM.get(8, clutchMin);
+    EEPROM.get(10, clutchMax);
+    EEPROM.get(12, wheelMaxDeg);
+    EEPROM.get(14, mode50deg);
+    EEPROM.get(15, INVERSALEWHEEL);
 }
 
 void Core::Keyboard() {
     if (button1State != digitalRead(button1Pin)) {  
         button1State = false;
-        firmwareMode = !firmwareMode;
+        firmwareMode = !firmwareMode; 
+    }
+    if (!digitalRead(button3Pin))
+    {
+        if (button1Counter > 400) {
+            button1Counter = 0;
+            button1State = true;
+            if (scense => 3) scense = 1;
+            else scense++;
+        }
+        button1Counter++;
+    }
+    if (button3State != digitalRead(button3Pin)) {  
+        button3State = false;
+        button1Counter = 0;
+        encCounter = 0;
+    }
+    if (!digitalRead(button3Pin))
+    {
+        if (button3Counter > 400) {
+            button1State = false;
+            firmwareMode = !firmwareMode; 
+        }
+        button3Counter++;
     }
 
     button1State = digitalRead(button1Pin);
@@ -136,3 +186,40 @@ void Core::Keyboard() {
     button3State = digitalRead(button3Pin);
 }
 
+// const int buttonPin = 2;       // Пин кнопки
+// const int shortPressTime = 500; // Время для определения короткого нажатия (500 мс)
+// bool buttonState = false;
+// unsigned long pressStartTime = 0;
+
+// void setup() {
+//   pinMode(buttonPin, INPUT_PULLUP); // Настройка кнопки с подтяжкой к питанию
+//   Serial.begin(9600);               // Запуск последовательного порта для отладки
+// }
+
+// void loop() {
+//   bool currentState = digitalRead(buttonPin) == LOW;
+
+//   // Если кнопка только что была нажата
+//   if (currentState && !buttonState) {
+//     pressStartTime = millis(); // Записываем время начала нажатия
+//   }
+  
+//   // Если кнопка была отпущена после нажатия
+//   if (!currentState && buttonState) {
+//     unsigned long pressDuration = millis() - pressStartTime; // Длительность нажатия
+
+//     // Короткое нажатие
+//     if (pressDuration < shortPressTime) {
+//       Serial.println("Короткое нажатие: выполняется действие 1");
+//       // Действие для короткого нажатия
+//     }
+//     // Длинное нажатие
+//     else {
+//       Serial.println("Длинное нажатие: выполняется действие 2");
+//       // Действие для длинного нажатия
+//     }
+//   }
+
+//   // Обновляем текущее состояние кнопки
+//   buttonState = currentState;
+// }

@@ -48,6 +48,9 @@ void encTick() {
 
 void loop() {
     if (core != nullptr) {
+        if (!digitalRead(15)) {  
+            encCounter = 0;
+        } 
         core->gameLoop(encCounter);  // Передаем текущее значение энкодера в основную логику игры
     }
 }

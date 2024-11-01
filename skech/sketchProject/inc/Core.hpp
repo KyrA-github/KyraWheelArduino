@@ -2,7 +2,8 @@
 #define CORE_HPP
 
 #include <EEPROM.h>
-#include <GyverEncoder.h>
+//#include <GyverEncoder.h>
+#include <GyverButton.h>
 #include <HID-Project.h>
 
 #include "display.hpp"
@@ -13,30 +14,36 @@ class Core
 {
 private:
    // Encoder* encoder = nullptr;
+    
 
-    Pedal* pedal = nullptr;
+    
     Display* display = nullptr;    
 
-    int gasMin = 0, gasMax = 1023, brakeMin = 0, brakeMax = 1023, clutchMin = 0, clutchMax = 1023;
+    int gasMin = 0, gasMax = 1023;
+    int brakeMin = 0, brakeMax = 1023;
+    int clutchMin = 0, clutchMax = 1023;
     int wheelMaxDeg = 180;
 
     int scense = 1; 
-    int mode50deg = 0;
-
-
+    int collibrationSens = 0;
     volatile int encCounter = 0;
+    unsigned long lastTimeDisplay = 0, lastTimePedal = 0, lastTimeGamepad = 0, lastTimefirmware = 0;
 
-    unsigned long lastTimeDisplay = 0, lastTimePedal = 0, lastTimeGamepad = 0;
     int8_t* message = nullptr;
-
-    bool button1State = 0, button2State = 0, button3State = 0;
-    int button1Counter = 0, button2Counter = 0, button3Counter = 0;
 
     bool INVERSALEWHEEL = false;
     bool INVERTEDPEDAL = false;
-    bool firmwareMode = false;
+    bool REFLASHINGMODE = false;
 
+    // buttons
     const int button1Pin = 15, button2Pin = 14, button3Pin = 16;
+    GButton* button1 = nullptr;
+    GButton* button2 = nullptr;
+    GButton* button3 = nullptr;
+
+    // pedals
+    const int pedalPin = 10;
+    Pedal* pedal = nullptr;
 
     void scenses();
     void pedalLogic(); 

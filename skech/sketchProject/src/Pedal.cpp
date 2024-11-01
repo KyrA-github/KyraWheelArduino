@@ -1,22 +1,23 @@
 #include "../inc/Pedal.hpp"
 
-// Инициализация через динамическое выделение памяти
-Pedal::Pedal(int speed, int pin) {
-    rf_driver = new RH_ASK(speed, pin);  
-}
+// Инициализация с передачей параметров скорости и пина
+Pedal::Pedal(int speed, int pin) : speed(speed), pin(pin) {}
 
 Pedal::~Pedal() {
-    delete rf_driver; 
+    vw_rx_stop();  // Остановка приёмника VirtualWire
 }
 
 bool Pedal::init() {
-    return rf_driver->init();  
+    vw_set_rx_pin(pin);            // Устанавливаем пин для приёма
+    vw_setup(speed);               // Устанавливаем скорость
+    vw_rx_start();                 // Запуск приёмника
+    return true;
 }
 
 bool Pedal::lisening() {
-    return rf_driver->recv(buf, &buflen);  
+    return vw_get_message(reinterpret_cast<uint8_t*>(buf), &buflen);  // Получаем сообщение, если оно доступно
 }
 
 int8_t* Pedal::getMessage() {
-    return buf;  
+    return buf;
 }

@@ -1,29 +1,46 @@
 #include "../inc/Core.hpp"
-Core::Core() : wheelMaxDeg(180), scense(1), encCounter(0), lastTimeDisplay(0), lastTimePedal(0), lastTimeGamepad(0), message(nullptr), button1State(0), button2State(0), button3State(0), 
-INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), button3Pin(16), gasMin(0), gasMax(1023), brakeMin(0), brakeMax(1023), clutchMin(0), clutchMax(1023), firmwareMode(false)
+Core::Core() : wheelMaxDeg(180), scense(1), encCounter(0), lastTimeDisplay(0), lastTimePedal(0), lastTimeGamepad(0), message(nullptr), 
+INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), button3Pin(16), gasMin(0), gasMax(1023), brakeMin(0), brakeMax(1023), clutchMin(0), clutchMax(1023), REFLASHINGMODE(false)
 {
     Serial.begin(9600);
+
     Gamepad.begin();
-    pinMode(button1Pin, INPUT_PULLUP);
-    pinMode(button2Pin, INPUT_PULLUP);
-    pinMode(button3Pin, INPUT_PULLUP);
 
     display = new Display(128, 64);
-    pedal = new Pedal(2000, 9);
-    //encoder = new Encoder(5, 6, 13);
+    pedal = new Pedal(2000, 10);
+    button1 = new GButton(button1Pin);
+    button2 = new GButton(button2Pin);
+    button3 = new GButton(button3Pin);
 
-    //encoder->setType(TYPE2); // TYPE1, TYPE2
+    button1->setDebounce(50);        // настройка антидребезга (по умолчанию 80 мс)
+    button1->setTimeout(1000);        // настройка таймаута на удержание (по умолчанию 500 мс)
+    button1->setClickTimeout(600);   // настройка таймаута между кликами (по умолчанию 300 мс)
+
+    button2->setDebounce(50); 
+    button2->setTimeout(1000);
+    button2->setClickTimeout(600);
+
+    button3->setDebounce(50);
+    button3->setTimeout(1000);
+    button3->setClickTimeout(600);
+
+
     if (!pedal->init()) {
         Serial.println("init failed");
         while (1);
     }
+
     display->clear();
+
     getingFromEEPROM();
 }
 
 Core::~Core()
 {
     //if (encoder) delete encoder;
+    if (button1) delete button1;
+    if (button2) delete button2;
+    if (button3) delete button3;
     if (pedal) delete pedal;
     if (display) delete display;
     if (message) delete[] message; 
@@ -31,7 +48,7 @@ Core::~Core()
 
 void Core::gameLoop(int en) {
     encCounter = en;
-    if (firmwareMode) {
+    if (!REFLASHINGMODE) {
         pedalLogic();
        // logicEncoder();
         gamepad();
@@ -71,20 +88,42 @@ void Core::scenses() {
                 display->setScene1(00, 00, 00, encCounter, 0, 0);
                 display->setConnectionIndicator(false);
             }
-            
-
         } else if (scense == 2){
-            display->setScene2(00, 00, 00, encCounter, 0, 0);
-
-        } else if (scense == 3){ 
-            display->setScene3(mode50deg, 0);
-            if (button1State != digitalRead(button1Pin)) {  
-                button1State = false;
-                mode50deg = !mode50deg;
-                EEPROM.put(14, mode50deg);
-                display->drawSave(true);
+             if (message != nullptr) {
+                display->setConnectionIndicator(true);
+                if (collibrationSens == 0) {
+                    display->setScene2(message[0], message[1], message[2], encCounter, 0, 0);
+                    gasMax = message[0];
+                    brakeMax = message[1];
+                    clutchMax = message[2];
+                    display->setScene2(gasMax, brakeMax, clutchMax, encCounter, 0, 0);
+                    display->drawSave(true);
+                    if (button3->isSingle()) {
+                        collibrationSens = 1;
+                        EEPROM.put(2, gasMax);
+                        EEPROM.put(6, brakeMax);
+                        EEPROM.put(10, clutchMax);
+                        EEPROM.put(12, abs(encCounter));
+                    }
+                } else if (collibrationSens == 1) {
+                    display->setScene2(message[0], message[1], message[2], encCounter, 0, 0);
+                    gasMax = message[0];
+                    brakeMax = message[1];
+                    clutchMax = message[2];
+                    display->setScene2(gasMax, brakeMax, clutchMax, encCounter, 0, 0);
+                    display->drawSave(true);
+                    if (button3->isSingle()) {
+                        collibrationSens = 0;
+                        EEPROM.put(0, gasMin);
+                        EEPROM.put(4, brakeMin);
+                        EEPROM.put(8, clutchMin);
+                    }
+                }
+            } else {
+                display->setScene2(00, 00, 00, encCounter, 0, 0);
+                display->setConnectionIndicator(false);
             }
-        }
+        } 
         display->updateLogic();
         display->update();
     } 
@@ -119,13 +158,6 @@ void Core::gamepad() {
     }
 }
 
-// void Core::logicEncoder() {
-//     if (encoder != nullptr) {
-//         encoder->tick();
-//         if (encoder->isRight()) encCounter++;    
-//         if (encoder->isLeft()) encCounter--;
-//     }
-// }
 
 void Core::savingToEEPROM() {
     EEPROM.put(0, gasMin);
@@ -135,8 +167,7 @@ void Core::savingToEEPROM() {
     EEPROM.put(8, clutchMin);
     EEPROM.put(10, clutchMax);
     EEPROM.put(12, wheelMaxDeg);
-    EEPROM.put(14, mode50deg);
-    EEPROM.put(15, INVERSALEWHEEL);
+    EEPROM.put(14, INVERSALEWHEEL);
 }
 
 
@@ -148,78 +179,27 @@ void Core::getingFromEEPROM() {
     EEPROM.get(8, clutchMin);
     EEPROM.get(10, clutchMax);
     EEPROM.get(12, wheelMaxDeg);
-    EEPROM.get(14, mode50deg);
-    EEPROM.get(15, INVERSALEWHEEL);
+    EEPROM.get(14, INVERSALEWHEEL);
 }
 
 void Core::Keyboard() {
-    if (button1State != digitalRead(button1Pin)) {  
-        button1State = false;
-        firmwareMode = !firmwareMode; 
-    }
-    if (!digitalRead(button3Pin))
-    {
-        if (button1Counter > 400) {
-            button1Counter = 0;
-            button1State = true;
-            if (scense => 3) scense = 1;
-            else scense++;
-        }
-        button1Counter++;
-    }
-    if (button3State != digitalRead(button3Pin)) {  
-        button3State = false;
-        button1Counter = 0;
-        encCounter = 0;
-    }
-    if (!digitalRead(button3Pin))
-    {
-        if (button3Counter > 400) {
-            button1State = false;
-            firmwareMode = !firmwareMode; 
-        }
-        button3Counter++;
+    button1->tick();
+    button2->tick();
+    button3->tick();
+    if (button1->isTriple()) {  
+        REFLASHINGMODE = !REFLASHINGMODE; 
     }
 
-    button1State = digitalRead(button1Pin);
-    button2State = digitalRead(button2Pin);
-    button3State = digitalRead(button3Pin);
+    if (button2->isSingle())
+    {
+        if (scense >= 3){
+            scense = 1;
+            collibrationSens = 0;
+        } else {
+            scense++;
+            collibrationSens = 0;
+        }
+    }
+   
 }
 
-// const int buttonPin = 2;       // Пин кнопки
-// const int shortPressTime = 500; // Время для определения короткого нажатия (500 мс)
-// bool buttonState = false;
-// unsigned long pressStartTime = 0;
-
-// void setup() {
-//   pinMode(buttonPin, INPUT_PULLUP); // Настройка кнопки с подтяжкой к питанию
-//   Serial.begin(9600);               // Запуск последовательного порта для отладки
-// }
-
-// void loop() {
-//   bool currentState = digitalRead(buttonPin) == LOW;
-
-//   // Если кнопка только что была нажата
-//   if (currentState && !buttonState) {
-//     pressStartTime = millis(); // Записываем время начала нажатия
-//   }
-  
-//   // Если кнопка была отпущена после нажатия
-//   if (!currentState && buttonState) {
-//     unsigned long pressDuration = millis() - pressStartTime; // Длительность нажатия
-
-//     // Короткое нажатие
-//     if (pressDuration < shortPressTime) {
-//       Serial.println("Короткое нажатие: выполняется действие 1");
-//       // Действие для короткого нажатия
-//     }
-//     // Длинное нажатие
-//     else {
-//       Serial.println("Длинное нажатие: выполняется действие 2");
-//       // Действие для длинного нажатия
-//     }
-//   }
-
-//   // Обновляем текущее состояние кнопки
-//   buttonState = currentState;
-// }

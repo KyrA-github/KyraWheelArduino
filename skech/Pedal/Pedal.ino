@@ -1,21 +1,26 @@
 #include <VirtualWire.h>
 
+#define transmitPin 12  // Пин для передачи данных
+#define transmitSpeed 2000  // Скорость передачи в бит/с
+#define PedalPin1 A1
+#define PedalPin2 A2
+#define PedalPin3 A5
+// КПП пины
+const int kppPin1 = 2, kppPin2 = 3, kppPin3 = 4, kppPin4 = 5, kppPin5 = 6, kppPin6 = 7;
+
 void setup() {
-    Serial.begin(9600);
-    vw_set_rx_pin(9); // Установите пин приемника
-    vw_setup(2000);    // Установите скорость передачи
-    vw_rx_start();     // Начинаем прием
+    vw_set_tx_pin(transmitPin);  
+    vw_setup(transmitSpeed);   
 }
 
 void loop() {
-    uint8_t buf[6]; // Буфер для получаемого сообщения
-    uint8_t buflen = sizeof(buf);
+    int8_t Pedal1 = constrain(analogRead(PedalPin1), -128, 127);
+    int8_t Pedal2 = constrain(analogRead(PedalPin2), -128, 127);
+    int8_t Pedal3 = constrain(analogRead(PedalPin3), -128, 127);
+    int8_t message[5] = {Pedal1, Pedal2, Pedal3, 0, 0};  
 
-    if (vw_get_message(buf, &buflen)) { // Если получено сообщение
-        Serial.print("Received: ");
-        for (int i = 0; i < buflen; i++) {
-            Serial.print((char)buf[i]); // Печатаем полученное сообщение
-        }
-        Serial.println();
-    }
+    vw_send(reinterpret_cast<uint8_t*>(message), sizeof(message)); 
+    vw_wait_tx();  
+
+    delay(10);    
 }

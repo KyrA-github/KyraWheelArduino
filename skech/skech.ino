@@ -168,9 +168,7 @@ void logicGamepad() {
         Gamepad.zAxis(brake);  // Устанавливаем ось Z
        // Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
         Gamepad.write(); 
-        Serial.print(analogRead(pedalGasPin));
-        Serial.print("  ");
-        Serial.println(analogRead(pedalBrakePin));
+
     }
 }
 

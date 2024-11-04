@@ -7,7 +7,6 @@
 #include <HID-Project.h>
 
 #include "display.hpp"
-#include "Pedal.hpp"
 
 
 class Core
@@ -29,7 +28,7 @@ private:
     volatile int encCounter = 0;
     unsigned long lastTimeDisplay = 0, lastTimePedal = 0, lastTimeGamepad = 0, lastTimefirmware = 0;
 
-    int8_t* message = nullptr;
+    int message[5] = {0, 0, 0, 0, 0};
 
     bool INVERSALEWHEEL = false;
     bool INVERTEDPEDAL = false;
@@ -40,10 +39,6 @@ private:
     GButton* button1 = nullptr;
     GButton* button2 = nullptr;
     GButton* button3 = nullptr;
-
-    // pedals
-    const int pedalPin = 10;
-    Pedal* pedal = nullptr;
 
     void scenses();
     void pedalLogic(); 

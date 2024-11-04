@@ -1,5 +1,5 @@
 #include "../inc/Core.hpp"
-Core::Core() : wheelMaxDeg(180), scense(1), encCounter(0), lastTimeDisplay(0), lastTimePedal(0), lastTimeGamepad(0), message(nullptr), 
+Core::Core() : wheelMaxDeg(180), scense(1), encCounter(0), lastTimeDisplay(0), lastTimePedal(0), lastTimeGamepad(0), 
 INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), button3Pin(16), gasMin(0), gasMax(1023), brakeMin(0), brakeMax(1023), clutchMin(0), clutchMax(1023), REFLASHINGMODE(false)
 {
     Serial.begin(9600);
@@ -7,7 +7,7 @@ INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), but
     Gamepad.begin();
 
     display = new Display(128, 64);
-    pedal = new Pedal(2000, 10);
+    
     button1 = new GButton(button1Pin);
     button2 = new GButton(button2Pin);
     button3 = new GButton(button3Pin);
@@ -25,12 +25,10 @@ INVERSALEWHEEL(false), INVERTEDPEDAL(false), button1Pin(15), button2Pin(14), but
     button3->setClickTimeout(600);
 
 
-    if (!pedal->init()) {
-        Serial.println("init failed");
-        while (1);
-    }
-
     display->clear();
+
+    pinMode(9, INPUT);
+    pinMode(10, INPUT);
 
     getingFromEEPROM();
 }
@@ -41,9 +39,8 @@ Core::~Core()
     if (button1) delete button1;
     if (button2) delete button2;
     if (button3) delete button3;
-    if (pedal) delete pedal;
+
     if (display) delete display;
-    if (message) delete[] message; 
 }
 
 void Core::gameLoop(int en) {
@@ -59,16 +56,18 @@ void Core::gameLoop(int en) {
 
 
 void Core::pedalLogic() {
-    if (millis() - lastTimePedal > 10) {
-        lastTimePedal = millis();
-        if (pedal != nullptr) {
-            if (pedal->lisening()) {
-                message = pedal->getMessage();
-            } else {
-                message = nullptr;
-            }
-        }
-    }
+    message[0] = analogRead(9);  // Газ
+    message[1] = analogRead(10);  // Газ
+    message[2] = 0;  // Сцепление
+    message[3] = 0;
+    message[4] = 0;
+
+    
+    
+    // if (pedal->lisening()) {
+    //     message = pedal->getMessage();
+    // }
+
 }
 
 void Core::scenses() {
@@ -78,9 +77,9 @@ void Core::scenses() {
         if (scense == 1){
             if (message != nullptr) {
                 display->setScene1(
-                    constrain(message[0], 0, 100),
-                     constrain(message[1], 0, 100),
-                      constrain(message[2], 0, 100),
+                   map(message[0], gasMin-2, gasMax, 0, 100),
+                      map(message[1], brakeMin-2, brakeMax, 0, 100),
+                      map(message[2], clutchMin-2, clutchMax, 0, 100),
                        constrain(encCounter, -wheelMaxDeg, wheelMaxDeg),
                         message[3], message[4]);
                 display->setConnectionIndicator(true);
@@ -91,32 +90,30 @@ void Core::scenses() {
         } else if (scense == 2){
              if (message != nullptr) {
                 display->setConnectionIndicator(true);
+                display->setScene2(message[0], message[1], message[2], encCounter, 0, 0);
                 if (collibrationSens == 0) {
-                    display->setScene2(message[0], message[1], message[2], encCounter, 0, 0);
-                    gasMax = message[0];
-                    brakeMax = message[1];
-                    clutchMax = message[2];
-                    display->setScene2(gasMax, brakeMax, clutchMax, encCounter, 0, 0);
-                    display->drawSave(true);
+                    display->drawSave(true, 1);
                     if (button3->isSingle()) {
                         collibrationSens = 1;
+                        gasMin = message[0];
+                        brakeMin = message[1];
+                        clutchMin = message[2];
                         EEPROM.put(2, gasMax);
                         EEPROM.put(6, brakeMax);
                         EEPROM.put(10, clutchMax);
                         EEPROM.put(12, abs(encCounter));
                     }
                 } else if (collibrationSens == 1) {
-                    display->setScene2(message[0], message[1], message[2], encCounter, 0, 0);
-                    gasMax = message[0];
-                    brakeMax = message[1];
-                    clutchMax = message[2];
-                    display->setScene2(gasMax, brakeMax, clutchMax, encCounter, 0, 0);
-                    display->drawSave(true);
+                    display->drawSave(true, 2);
                     if (button3->isSingle()) {
+                        gasMax = message[0];
+                        brakeMax = message[1];
+                        clutchMax = message[2];
                         collibrationSens = 0;
                         EEPROM.put(0, gasMin);
                         EEPROM.put(4, brakeMin);
                         EEPROM.put(8, clutchMin);
+                        getingFromEEPROM();
                     }
                 }
             } else {
@@ -138,21 +135,21 @@ void Core::gamepad() {
         wheel = map(wheel, -wheelMaxDeg, wheelMaxDeg, -32768, 32767);
         Gamepad.xAxis(wheel);
 
-        int8_t gas = 0, brake = 0, clutch = 0;  // Инициализация значений
+        int gas = 0, brake = 0, clutch = 0;  // Инициализация значений
         
-        if (message != nullptr) {
-            gas = map(message[0], gasMin, gasMax, -32768, 32767);
-            brake = map(message[1], brakeMin, brakeMax, -32768, 32767);
-            clutch = map(message[2], clutchMin, clutchMax, -32768, 32767);
-            if (INVERTEDPEDAL) {
-                gas = -gas;
-                brake = -brake;
-                clutch = -clutch;
-            }
+
+        gas = map(message[0], gasMin-2, gasMax, -127,128);
+        brake = map(message[1], brakeMin-2, brakeMax, -127, 128);
+        clutch = map(message[2], clutchMin-1, clutchMax, -127, 128);
+        if (INVERTEDPEDAL) {
+            gas = -gas;
+            brake = -brake;
+            clutch = -clutch;
         }
+        
         Gamepad.xAxis(wheel);  // Устанавливаем ось X
-        Gamepad.yAxis(gas);    // Устанавливаем ось Y (значение газа)
-        Gamepad.zAxis(brake);  // Устанавливаем ось Z (значение тормоза)
+        Gamepad.ryAxis(gas);    // Устанавливаем ось Y (значение газа)
+        Gamepad.rxAxis(brake);  // Устанавливаем ось Z (значение тормоза)
         Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz (значение сцепления)
         Gamepad.write();
     }
@@ -188,6 +185,9 @@ void Core::Keyboard() {
     button3->tick();
     if (button1->isTriple()) {  
         REFLASHINGMODE = !REFLASHINGMODE; 
+    }
+    if (button1->isDouble()) {  
+        getingFromEEPROM(); 
     }
 
     if (button2->isSingle())

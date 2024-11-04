@@ -90,12 +90,16 @@ void Display::setScene3(int pedalMode, int wheelMode) {
     }
 }
 
-void Display::drawSave(bool show) {
+void Display::drawSave(bool show, int mode) {
     if (show) {
         saveShow = true;
         display.setTextSize(1);
         display.setCursor(5,5);
-        display.print("SAVE");
+        if (mode == 1) {
+            display.print("Save 1");
+        } else if (mode == 2) {
+            display.print("Save 2");
+        }
     } else {
         saveShow = false;
         display.setTextSize(1);
@@ -108,7 +112,7 @@ void Display::updateLogic() {
     if (saveShow) {
         if (millis() - lastTimeSave > 1000) {
             lastTimeSave = millis();
-            drawSave(false);
+            drawSave(false , 0);
         }
     }
 }

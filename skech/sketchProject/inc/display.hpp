@@ -16,7 +16,7 @@ class Display {
         void setScene1(int gas, int brake, int clutch, int wheel, int HShifter, int gear); // сцена 1 основная
         void setScene2(int gas, int brake, int clutch, int wheel, int HShifter, int gear); // сцена 2 калибровка
         void setScene3(int pedalMode, int wheelMode); // сцена 3 установка режима работы
-        void drawSave(bool show);
+        void drawSave(bool show, int mode);
 
         void setConnectionIndicator(bool connected);
     private:

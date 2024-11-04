@@ -17,9 +17,9 @@ bool DEBUG = 0; // 0 = off, 1 = on отладочный режим
 #define button1Pin 15 // пин Кнопки1 
 #define button2Pin 16 // пин Кнопки2 
 
-#define pedalGasPin A0 // пин Газа
-#define pedalBrakePin A1 // пин тормоза
-#define pedalClutchPin A2 // пин Сцепления
+#define pedalGasPin 10 // пин Газа
+#define pedalBrakePin 9 // пин тормоза
+#define pedalClutchPin 8 // пин Сцепления
 
 #include <EEPROM.h>
 #include "HID-Project.h"
@@ -152,9 +152,9 @@ void logicGamepad() {
         wheel = map(wheel, -wheelMaxDeg, wheelMaxDeg, -32768, 32767);
         
         int gas, brake, clutch;
-        gas = map(analogRead(pedalGasPin), gasMin-10, gasMax+10, -32768, 32767);
-        brake = map(analogRead(pedalBrakePin), brakeMax-10, brakeMin-15, -128, 127);
-        clutch = map(analogRead(pedalClutchPin), clutchMin, clutchMax, -128, 127);
+        gas = map(analogRead(pedalGasPin), gasMin-10, gasMax+15, -32768, 32767);
+        brake = map(analogRead(pedalBrakePin), brakeMin-10, brakeMax+15, -127, 127);
+        clutch = map(analogRead(pedalClutchPin), clutchMin, clutchMax, -127, 127);
         //gas = constrain(gas, -128, 127);
         //brake = constrain(brake, -128, 127);
         //clutch = constrain(clutch, -128, 127);
@@ -164,10 +164,13 @@ void logicGamepad() {
             clutch = -clutch;
         }
         Gamepad.xAxis(wheel);  // Устанавливаем ось X
-      //  Gamepad.yAxis(gas);  // Устанавливаем ось Y
-      //  Gamepad.zAxis(brake);  // Устанавливаем ось Z
+       Gamepad.yAxis(gas);  // Устанавливаем ось Y
+        Gamepad.zAxis(brake);  // Устанавливаем ось Z
        // Gamepad.rzAxis(clutch);  // Устанавливаем ось Rz
         Gamepad.write(); 
+        Serial.print(analogRead(pedalGasPin));
+        Serial.print("  ");
+        Serial.println(analogRead(pedalBrakePin));
     }
 }
 

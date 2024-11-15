@@ -17,11 +17,13 @@ int CursorPos = 0;
 
 int wheelValues[] = {90, 180, 360, 540, 720, 900, 1080}; // Возможные значения wheelDec
 int currentWheelIndex = 0; // Индекс текущего значения wheelDec
-int wheelDec = 90;
+int wheelDec = wheelValues[currentWheelIndex]; // Начальное значение
 
+int pedalAdjustmentGas = 0, pedalAdjustmentBrake = 0, pedalAdjustmentClutch = 0;
 
 int STATUS = 0;
 int adjustmentStatus = 0;
+
 
 
 void setup() {
@@ -53,15 +55,15 @@ void loop() {
   button1Up->tick();
   button2Down->tick();
   button3ok->tick();
-  if (button1Up->isSingle()) {
-    Serial.println(1);
-  }
-  if (button2Down->isSingle()) {
-    Serial.println(2);
-  }
-  if (button3ok->isSingle()) {
-    Serial.println(3);
-  }
+  // if (button1Up->isSingle()) {
+  //   Serial.println(1);
+  // }
+  // if (button2Down->isSingle()) {
+  //   Serial.println(2);
+  // }
+  // if (button3ok->isSingle()) {
+  //   Serial.println(3);
+  // }
   if (button1Up->hasClicks() || button2Down->hasClicks() || button3ok->hasClicks()) {
     if (STATUS == 0) {
       home();
@@ -112,7 +114,7 @@ void home() {
         break;
       case 2:
         STATUS = 3;
-        adjustmentStatus = 0;
+        adjustmentStatus = -1;
         CursorPos = 0;
         break;
       case 3:
@@ -157,102 +159,134 @@ void mainFunc() {
 }
 void callibrationFunc() {
 }
+
+
+/*
+* Обрабатывает интерфейс настройки на дисплее, позволяя пользователю переключаться
+* между различными настройками, такими как ГАЗ, ТОРМОЗ, СЦЕПЛЕНИЕ и РУЛЬ, и настраивать их.
+* Функция очищает дисплей, настраивает начальный текст интерфейса и управляет
+* пользовательским вводом с помощью нажатия кнопок для навигации и подтверждения выбора.
+* - Кнопка 2 (button2Down) увеличивает позицию курсора или циклически перемещает
+* вперед по значениям колеса.
+* - Кнопка 1 (button1Up) уменьшает позицию курсора или циклически перемещает
+* назад по значениям колеса.
+* - Кнопка 3 (button3ok) подтверждает текущий выбор или возвращается в главное
+* меню/состояние.
+*
+* Функция обновляет дисплей текущими значениями настроек и позицией курсора, обеспечивая обратную связь в реальном времени для взаимодействия с пользователем.
+*/
 void adjustmentFunc() {
-  
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.print("  GAS:");
-  display.setCursor(0, 9);
-  display.print("  BRAKE:");
-  display.setCursor(0, 18);
-  display.print("  CLUTCH:");
-  display.setCursor(0, 27);
-  display.print("  WHEEL: ");
-  display.print(wheelDec);
-  
-  switch (adjustmentStatus) {
-        case 0:
-          if (button2Down->isSingle()) {
-            CursorPos++;
-            if (CursorPos > 3) 
-              CursorPos = 0;
-          }
-          if (button1Up->isSingle()) {
-            CursorPos--;
-            if (CursorPos < 0) 
-              CursorPos = 3;
-          }
-          if (button3ok->isSingle()) {
-            switch (CursorPos) {
-              case 1:
-                adjustmentStatus = 1;
-                break;
-              case 2:
-                adjustmentStatus = 2;
-                break;
-              case 3:
-                adjustmentStatus = 3;
-                break;
-              case 4:
-                adjustmentStatus = 4;
-                break;
-              default:
-                break;
+    // Очистка экрана дисплея и начальная отрисовка интерфейса
+    
+    
+
+    // Основной переключатель состояний
+    switch (adjustmentStatus) {
+        case 0: // Основной режим выбора
+            if (button2Down->isSingle()) {
+                CursorPos++;
+                if (CursorPos > 3) 
+                    CursorPos = 0;
             }
-          }
-          if (button3ok->isDouble()) {
-            STATUS = 0;
-            CursorPos = 0;
-            return;
-          }
-          if (button2Down->isSingle()) {
-              currentWheelIndex++;
-              if (currentWheelIndex >= sizeof(wheelValues) / sizeof(wheelValues[0])) {
-                currentWheelIndex = 0; // Вернуться к началу, если достигли конца
-              }
-              wheelDec = wheelValues[currentWheelIndex];
+            if (button1Up->isSingle()) {
+                CursorPos--;
+                if (CursorPos < 0) 
+                    CursorPos = 3;
+            }
+            if (button3ok->isSingle()) {
+                adjustmentStatus = CursorPos +1; // Переход к выбранному состоянию
+            }
+            if (button3ok->isDouble()) { // Выход
+                STATUS = 0;
+                CursorPos = 0;
+                adjustmentStatus = -1;
+                return;
+            }
+            break;
+
+        case 1: // GAS
+            pedalAdjustmentGas = adjustmentFunc(pedalAdjustmentGas);
+            if (button3ok->isSingle()) 
+                adjustmentStatus = 0; // Возврат к основному режиму            
+            break;
+        case 2: // BRAKE
+            pedalAdjustmentBrake = adjustmentFunc(pedalAdjustmentBrake);
+            if (button3ok->isSingle()) 
+                adjustmentStatus = 0; // Возврат к основному режиму            
+            break;
+        case 3: // CLUTCH
+            pedalAdjustmentClutch = adjustmentFunc(pedalAdjustmentClutch);
+            if (button3ok->isSingle()) 
+                adjustmentStatus = 0; // Возврат к основному режиму            
+            break;
+        case 4: // WHEEL
+
+            if (button2Down->isSingle()) {
+                // Увеличиваем индекс с циклическим переходом
+                currentWheelIndex = (currentWheelIndex + 1) % (sizeof(wheelValues) / sizeof(wheelValues[0]));
+                wheelDec = wheelValues[currentWheelIndex]; // Обновляем значение
             }
 
-          if (button1Up->isSingle()) {
-            currentWheelIndex--;
-            if (currentWheelIndex < 0) {
-              currentWheelIndex = sizeof(wheelValues) / sizeof(wheelValues[0]) - 1; // Переход к последнему элементу
-            }
-            wheelDec = wheelValues[currentWheelIndex];
-          }
-
-          break;
-        case 1:
-            if (button3ok->isSingle()) {
-              adjustmentStatus = 0;
-            }
-          
-          break;
-        case 2:
-            if (button3ok->isSingle()) {
-              adjustmentStatus = 0;
+            if (button1Up->isSingle()) {
+                // Уменьшаем индекс с циклическим переходом
+                if (currentWheelIndex == 0) {
+                    currentWheelIndex = (sizeof(wheelValues) / sizeof(wheelValues[0])) - 1; // Переход к последнему элементу
+                } else {
+                    currentWheelIndex--;
+                }
+                wheelDec = wheelValues[currentWheelIndex]; // Обновляем значение
             }
 
-          break;
-        case 3:
             if (button3ok->isSingle()) {
-              adjustmentStatus = 0;
+                adjustmentStatus = 0; // Возврат к основному режиму
             }
-          break;
-        case 4:
-          
-          
-          if (button3ok->isSingle()) {
-            adjustmentStatus = 0;
-          }
-          break;
+            break;
+
         default:
-          break;
-      }
-  drawCursor();
-  display.display();
-
+            adjustmentStatus = 0; // Безопасное состояние
+            break;
+    }
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("  GAS:      ");
+    display.print(pedalAdjustmentGas);
+    display.setCursor(0, 9);
+    display.print("  BRAKE:    ");
+    display.print(pedalAdjustmentBrake);
+    display.setCursor(0, 18);
+    display.print("  CLUTCH:   ");
+    display.print(pedalAdjustmentClutch);
+    display.setCursor(0, 27);
+    display.print("  WHEEL:    ");
+    display.print(wheelDec);
+    // Отрисовка курсора
+    drawCursor();
+    // Обновление дисплея
+    display.display();
 }
+
+/**
+* @brief Увеличить или уменьшить заданное значение с помощью кнопок
+*
+* Эта функция увеличит или уменьшит заданное значение на 1, если соответствующая кнопка нажата один раз,
+* или на 5, если кнопка нажата дважды быстро.
+*
+* @param value Значение, которое нужно увеличить или уменьшить
+* @return Скорректированное значение
+*/
+int adjustmentFunc(int value) {
+  if (button2Down->isSingle())
+      value--;
+  if (button1Up->isSingle()) 
+      value++;            
+  if (button2Down->isDouble()) 
+      value -= 5;            
+  if (button1Up->isDouble()) 
+      value += 5;          
+
+  return value;
+}
+
 void debugFunc() {
   
 }

@@ -1,13 +1,16 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <GyverButton.h>
+#include <HID-Project.h>
+#include <EEPROM.h>
+
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-#include <GyverButton.h>
 const int button1Pin = 15, button2Pin = 14, button3Pin = 16;
 GButton* button1Up = nullptr;
 GButton* button2Down = nullptr;
@@ -30,8 +33,10 @@ int pedalAdjustmentGasMin = 0,
 
 int STATUS = 0;
 int adjustmentStatus = 0;
+int adjustmentLowStatus = 0;
 bool resetStatusAdjustment = false;
 bool update = false;
+bool readflag = false;
 
 bool INVERTEDPEDAL = false;
 
@@ -41,13 +46,14 @@ int pinGas = A0, pinBrake = A1, pinClutch = A2;
 int gasMin = 0, gasMax = 0, brakeMin = 0, brakeMax = 0, clutchMin = 0, clutchMax = 0;
 
 
-/**
- * Initialization function
- *
- * Initialize OLED display, clear and set white color
- * Initialize buttons and set debouncing, timeout and click timeout
- * Set serial communication at 9600 bps
- * Then call home function
+
+/** 
+ *  Инициализация
+ *  
+ *  Выполняет инициализацию дисплея, кнопок и серийного порта.
+ *  Устанавливает настройки антидребезга, таймаута на удержание и таймаута
+ *  между кликами для кнопок.
+ *  Выводит на дисплей стартовое сообщение.
  */
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Initialize with I2C address 0x3C
@@ -71,6 +77,7 @@ void setup() {
   button3ok->setTimeout(1000);
   button3ok->setClickTimeout(300);
   Serial.begin(9600);
+  Gamepad.begin();
   home();
 }
 
@@ -84,53 +91,68 @@ void setup() {
 * СТАТУС может быть изменен функциями, вызываемыми этим циклом.
 */
 void loop() {
-  button1Up->tick();
-  button2Down->tick();
-  button3ok->tick();
-  if (button1Up->hasClicks() || button2Down->hasClicks() || button3ok->hasClicks() || update) {
-    update = false;
-    if (STATUS == 0) 
-      home();
-    else if (STATUS == 1)
-      mainFunc();
-    else if (STATUS == 2)
-      callibrationFunc();
-    else if (STATUS == 3)
-      adjustmentFunc();
-    else if(STATUS == 4)
-      debugFunc();
-    else if(STATUS == 5)
-        saveFunc();
-  }
-
-  
-    if (STATUS == 1) {
-        read();
+    button1Up->tick();
+    button2Down->tick();
+    button3ok->tick();
+    if (button1Up->hasClicks() || button2Down->hasClicks() || button3ok->hasClicks() || update) {
+        update = false;
+        if (STATUS == 0) 
+            home();
+        else if (STATUS == 1)
+            mainFunc();
+        else if (STATUS == 2)
+            callibrationFunc();
+        else if (STATUS == 3)
+            adjustmentFunc();
+        else if(STATUS == 4)
+            debugFunc();
+        else if(STATUS == 5)
+            saveFunc();
     }
+    if (readflag) 
+        read();
+    
 }
 
+
 /**
-* @brief Считывает и отображает аналоговые входы для руля и педалей.
-*
-* Эта функция считывает текущий счетчик энкодера и аналоговые значения для
-* педалей газа, тормоза и сцепления. Она отображает эти значения в указанном диапазоне
-* и назначает их глобальным переменным. Если педали инвертированы,
-* она инвертирует их значения.
-*
-* Значение `wheel` отображается из счетчика энкодера с использованием текущей
-* настройки градуса колеса. Значения педалей корректируются на основе их
-* соответствующих минимальных и максимальных настроек.
-*/
+ * @brief Функция считывает и отображает аналоговые входы для руля и педалей.
+ *
+ * Эта функция считывает текущий счетчик энкодера и аналоговые значения для
+ * педалей газа, тормоза и сцепления. Она отображает эти значения в указанном диапазоне
+ * и назначает их глобальным переменным. Если педали инвертированы,
+ * она инвертирует их значения.
+ *
+ * Значение `wheel` отображается из счетчика энкодера с использованием текущей
+ * настройки градуса колеса. Значения педалей корректируются на основе их
+ * соответствующих минимальных и максимальных настроек.
+ */
 void read() {
-    wheel = map(encCount, wheelDec/4, -wheelDec/4, -32768, 32767);
-    pedalGas = map(analogRead(pinGas), gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
-    pedalBrake = map(analogRead(pinBrake), brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
-    pedalClutch = map(analogRead(pinClutch), clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
+    // считываем текущий счетчик энкодера
+    int wheelValue = encCount;
+    // отображаем его в указанном диапазоне
+    wheel = map(wheelValue, wheelDec/4, -wheelDec/4, -32768, 32767);
+    // считываем аналоговые значения для педалей
+    int gasValue = analogRead(pinGas);
+    int brakeValue = analogRead(pinBrake);
+    int clutchValue = analogRead(pinClutch);
+    // корректируем значения педалей на основе их настроек
+    pedalGas = map(gasValue, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
+    pedalBrake = map(brakeValue, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
+    pedalClutch = map(clutchValue, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
+    // если педали инвертированы, инвертируем их значения
     if (INVERTEDPEDAL) {
         pedalGas = -pedalGas;
         pedalBrake = -pedalBrake;
         pedalClutch = -pedalClutch;
     }
+    // отображаем полученные значения на Gamepad
+    Gamepad.xAxis(wheel);
+    Gamepad.rxAxis(pedalGas);
+    Gamepad.ryAxis(pedalBrake);
+    Gamepad.rzAxis(pedalClutch);
+    // отправляем данные на Gamepad
+    Gamepad.write();
 }
 
 
@@ -252,7 +274,7 @@ void adjustmentFunc() {
     // Обработка состояния
     switch (adjustmentStatus) {
         case 0: { // Основной режим выбора
-            handleCursorMovement(3); // Обработка перемещения курсора в пределах [0-3]
+            handleCursorMovement(4); // Обработка перемещения курсора в пределах [0-3]
 
             if (button3ok->isSingle()) {
                 adjustmentStatus = CursorPos + 1; // Переход к выбранному состоянию
@@ -264,25 +286,50 @@ void adjustmentFunc() {
             break;
         }
         case 1: // GAS
-            processPedalAdjustment(pedalAdjustmentGas);
+            if (adjustmentLowStatus == 0)
+                processPedalAdjustment(pedalAdjustmentGasMax);
+            else
+                processPedalAdjustment(pedalAdjustmentGasMin);
             break;
         case 2: // BRAKE
-            processPedalAdjustment(pedalAdjustmentBrake);
+            if (adjustmentLowStatus == 0)
+                processPedalAdjustment(pedalAdjustmentBrakeMax);
+            else
+                processPedalAdjustment(pedalAdjustmentBrakeMin);
             break;
         case 3: // CLUTCH
-            processPedalAdjustment(pedalAdjustmentClutch);
+            if (adjustmentLowStatus == 0)
+                processPedalAdjustment(pedalAdjustmentClutchMax);
+            else
+                processPedalAdjustment(pedalAdjustmentClutchMin);
             break;
         case 4: // WHEEL
             processWheelAdjustment();
             break;
+        case 5: // Gamepad readflag
+            readflagSwitch();
         default:
             adjustmentStatus = 0; // Безопасное состояние
             break;
     }
+    
 
     // Возврат к основному режиму
-    if (adjustmentStatus > 0 && resetStatusAdjustment) {
+    if ((adjustmentStatus == 1 || adjustmentStatus == 2 || adjustmentStatus == 3) && resetStatusAdjustment) {
         if (button3ok->isSingle()) {
+            if (adjustmentLowStatus == 0){
+                adjustmentLowStatus = 1;
+            } else {
+                adjustmentLowStatus = 0;
+                adjustmentStatus = 0;
+            }      
+            resetStatusAdjustment = false;
+        }
+    }
+    // Возврат к основному режиму
+    if ((adjustmentStatus == 4 || adjustmentStatus == 5) && resetStatusAdjustment) {
+        if (button3ok->isSingle()) {
+            adjustmentLowStatus = 0;
             adjustmentStatus = 0;
             resetStatusAdjustment = false;
         }
@@ -313,6 +360,26 @@ void handleCursorMovement(int maxIndex) {
     }
     if (button1Up->isSingle()) {
         CursorPos = (CursorPos - 1 + (maxIndex + 1)) % (maxIndex + 1); // Циклический переход
+    }
+}
+
+/**
+* Функция для переключения флага readflag
+*
+* readflag - глобальный флаг, который отображает состояние
+* возможности считывания данных с потенциометров.
+* Если флаг установлен, то считывание данных
+* происходит. Если флаг сброшен, то считывание
+* данных не происходит.
+*
+* Функция readflagSwitch() переключает значение
+* флага readflag, используя кнопку button3ok.
+* Если кнопка button3ok была нажата, то
+* значение флага readflag изменяется на противоположное.
+*/
+void readflagSwitch() {
+    if (button3ok->isSingle()) {
+        readflag = !readflag; // Переключение флага
     }
 }
 
@@ -378,16 +445,20 @@ void processWheelAdjustment() {
 void displayMenuData() {
     display.setCursor(0, 0);
     display.print("  GAS:        ");
-    display.print(pedalAdjustmentGas);
+    display.print(pedalAdjustmentGasMax + " " + pedalAdjustmentGasMin);
     display.setCursor(0, 9);
     display.print("  BRAKE:      ");
-    display.print(pedalAdjustmentBrake);
+    display.print(pedalAdjustmentBrakeMax + " " + pedalAdjustmentBrakeMin);
     display.setCursor(0, 18);
     display.print("  CLUTCH:     ");
-    display.print(pedalAdjustmentClutch);
+    display.print(pedalAdjustmentClutchMax + " " + pedalAdjustmentClutchMin);
     display.setCursor(0, 27);
     display.print("  WHEEL:      ");
     display.print(wheelDec);
+    display.setCursor(0, 36);
+    display.print("  STATUS:     ");
+    display.print(readflag ? "ON" : "OFF");
+    display.display();
 }
 
 /**

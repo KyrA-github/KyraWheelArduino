@@ -5,261 +5,358 @@
 #include <HID-Project.h>
 #include <EEPROM.h>
 
+///<=====================НАСТРОЙКИ====================>
+#define ENC_TYPE 1                  /// тип энкодера, 0 или 1
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
+#define encoderPinA 5               /// пин A энкодера
+#define encoderPinB 6               /// пин B энкодера
+
+#define pinGas 10                   /// пин Газа
+#define pinBrake 9                 /// пин тормоза
+#define pinClutch 8                /// пин Сцепления
+
+#define button1Pin 15               /// пин Кнопки1
+#define button2Pin 14               /// пин Кнопки2
+#define button3Pin 16               /// пин Кнопки3
+///<=====================НАСТРОЙКИ====================>
+// Настройки экрана OLED
+#define SCREEN_WIDTH 128   // Ширина экрана в пикселях
+#define SCREEN_HEIGHT 64   // Высота экрана в пикселях
+#define OLED_RESET -1      // Пин сброса OLED (не используется)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-const int button1Pin = 15, button2Pin = 14, button3Pin = 16;
-GButton* button1Up = nullptr;
-GButton* button2Down = nullptr;
-GButton* button3ok = nullptr;
+// Указатели на кнопки
+GButton* button1Up = nullptr;  // Кнопка "Вверх"
+GButton* button2Down = nullptr; // Кнопка "Вниз"
+GButton* button3ok = nullptr;  // Кнопка "OK"
 
-int CursorPos = 0, encCount = 0, pedalGas = 0, pedalBrake = 0, pedalClutch = 0, wheel = 0, HShifter = 0, gear = 0;
+// Переменные состояния
+int CursorPos = 0;     // Позиция курсора на экране
+int pedalGas = 0;      // Значение газа
+int pedalBrake = 0;    // Значение тормоза
+int pedalClutch = 0;   // Значение сцепления
+int wheel = 0;         // Угол поворота руля
+int HShifter = 0;      // Состояние H-образного переключателя передач
+int gear = 0;          // Текущая передача
 
-int wheelValues[] = {90, 180, 360, 540, 720, 900, 1080}; // Возможные значения wheelDec
-int currentWheelIndex = 0; // Индекс текущего значения wheelDec
-int wheelDec = wheelValues[currentWheelIndex]; // Начальное значение
+// Переменные для энкодера
+volatile int encCount = 0;      // Счетчик импульсов энкодера
+volatile boolean state0;        // Текущее состояние
+volatile boolean lastState;     // Предыдущее состояние
+volatile boolean turnFlag;      // Флаг поворота энкодера
 
-int pedalAdjustmentGasMin = 0,
-    pedalAdjustmentGasMax = 0,
+// Переменные для управления обновлением
+int lastTimeupdate = 0;         // Время последнего обновления
+bool forceUpdate = false;       // Принудительное обновление экрана
 
-    pedalAdjustmentBrakeMin = 0,
-    pedalAdjustmentBrakeMax = 0,
+// Настройки руля
+int wheelValues[] = {90, 180, 360, 540, 720, 900, 1080}; // Возможные значения углов
+int currentWheelIndex = 0;       // Индекс текущего значения из массива
+int wheelDeg = wheelValues[currentWheelIndex]; // Начальное значение угла руля
 
-    pedalAdjustmentClutchMin = 0,
-    pedalAdjustmentClutchMax = 0;
+// Калибровочные значения для педалей
+int pedalAdjustmentGasMin = 0, pedalAdjustmentGasMax = 0;        // Газ
+int pedalAdjustmentBrakeMin = 0, pedalAdjustmentBrakeMax = 0;    // Тормоз
+int pedalAdjustmentClutchMin = 0, pedalAdjustmentClutchMax = 0;  // Сцепление
 
-int STATUS = 0;
-int adjustmentStatus = 0;
-int adjustmentLowStatus = 0;
-bool resetStatusAdjustment = false;
-bool update = false;
-bool readflag = false;
+// Статусы и флаги
+int STATUS = 0;                    // Текущий статус системы
+int adjustmentStatus = 0;          // Статус калибровки педалей
+int adjustmentLowStatus = 0;       // Статус нижнего значения калибровки
+bool resetStatusAdjustment = false; // Флаг сброса статусов калибровки
+bool update = false;               // Флаг обновления состояния
+bool updateFirmware = false;               // Флаг обновления прошивки
+bool readflag = false;             // Флаг чтения данных
+bool INVERTEDPEDAL = false;        // Флаг инверсии педалей
 
-bool INVERTEDPEDAL = false;
-
-
-int pinGas = A0, pinBrake = A1, pinClutch = A2;
-
-int gasMin = 0, gasMax = 0, brakeMin = 0, brakeMax = 0, clutchMin = 0, clutchMax = 0;
-
-
-
-/** 
- *  Инициализация
- *  
- *  Выполняет инициализацию дисплея, кнопок и серийного порта.
- *  Устанавливает настройки антидребезга, таймаута на удержание и таймаута
- *  между кликами для кнопок.
- *  Выводит на дисплей стартовое сообщение.
- */
-void setup() {
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Initialize with I2C address 0x3C
-  display.clearDisplay(); // очистка
-  display.setTextColor(WHITE); // цвет текста
-
-  display.display(); // Обновление экрана
-  button1Up = new GButton(button1Pin);
-  button2Down = new GButton(button2Pin);
-  button3ok = new GButton(button3Pin);
-
-  button1Up->setDebounce(20);        // настройка антидребезга (по умолчанию 80 мс)
-  button1Up->setTimeout(500);       // настройка таймаута на удержание (по умолчанию 500 мс)
-  button1Up->setClickTimeout(100);   // настройка таймаута между кликами (по умолчанию 300 мс)
-
-  button2Down->setDebounce(20); 
-  button2Down->setTimeout(500);
-  button2Down->setClickTimeout(100);
-
-  button3ok->setDebounce(50);
-  button3ok->setTimeout(1000);
-  button3ok->setClickTimeout(300);
-  Serial.begin(9600);
-  Gamepad.begin();
-  home();
-}
-
-/*
-* Основной цикл программы.
-*
-* Эта функция вызывается многократно.
-* Она вызывает функцию tick() всех кнопок и проверяет наличие щелчков.
-* Если щелчок обнаружен, он вызывает соответствующую функцию на основе текущего СТАТУСА.
-* СТАТУС — это глобальная переменная, которая указывает, какую функцию следует вызвать.
-* СТАТУС может быть изменен функциями, вызываемыми этим циклом.
-*/
-void loop() {
-    button1Up->tick();
-    button2Down->tick();
-    button3ok->tick();
-    if (button1Up->hasClicks() || button2Down->hasClicks() || button3ok->hasClicks() || update) {
-        update = false;
-        if (STATUS == 0) 
-            home();
-        else if (STATUS == 1)
-            mainFunc();
-        else if (STATUS == 2)
-            callibrationFunc();
-        else if (STATUS == 3)
-            adjustmentFunc();
-        else if(STATUS == 4)
-            debugFunc();
-        else if(STATUS == 5)
-            saveFunc();
-    }
-    if (readflag) 
-        read();
-    
-}
+// Диапазоны педалей (минимальные и максимальные значения)
+int gasMin = 0, gasMax = 1023;        // Диапазон газа
+int brakeMin = 0, brakeMax = 1023;    // Диапазон тормоза
+int clutchMin = 0, clutchMax = 1023;  // Диапазон сцепления
 
 
 /**
- * @brief Функция считывает и отображает аналоговые входы для руля и педалей.
- *
- * Эта функция считывает текущий счетчик энкодера и аналоговые значения для
- * педалей газа, тормоза и сцепления. Она отображает эти значения в указанном диапазоне
- * и назначает их глобальным переменным. Если педали инвертированы,
- * она инвертирует их значения.
- *
- * Значение `wheel` отображается из счетчика энкодера с использованием текущей
- * настройки градуса колеса. Значения педалей корректируются на основе их
- * соответствующих минимальных и максимальных настроек.
+ * @brief Инициализация системы.
+ * 
+ * Инициализирует дисплей, кнопки и серийный порт. 
+ * Устанавливает параметры антидребезга, таймаутов удержания и между кликами для кнопок. 
+ * Выводит стартовое сообщение на дисплей и выполняет настройку начального состояния системы.
+ */
+void setup() {
+    // Настройка таймеров (внешняя функция)
+    setupTmr();
+
+    // Инициализация OLED-дисплея
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Инициализация с I2C-адресом 0x3C
+    display.clearDisplay();                   // Очистка экрана
+    display.setTextColor(WHITE);              // Установка цвета текста (белый)
+    display.display();                        // Применение изменений на экране
+
+    // Инициализация кнопок
+    button1Up = new GButton(button1Pin);       // Кнопка "Вверх"
+    button2Down = new GButton(button2Pin);     // Кнопка "Вниз"
+    button3ok = new GButton(button3Pin);       // Кнопка "ОК"
+
+    // Настройка параметров кнопки "Вверх"
+    button1Up->setDebounce(20);                // Антидребезг: 20 мс
+    button1Up->setTimeout(500);                // Таймаут удержания: 500 мс
+    button1Up->setClickTimeout(100);           // Таймаут между кликами: 100 мс
+
+    // Настройка параметров кнопки "Вниз"
+    button2Down->setDebounce(20);              // Антидребезг: 20 мс
+    button2Down->setTimeout(500);              // Таймаут удержания: 500 мс
+    button2Down->setClickTimeout(100);         // Таймаут между кликами: 100 мс
+
+    // Настройка параметров кнопки "ОК"
+    button3ok->setDebounce(50);                // Антидребезг: 50 мс
+    button3ok->setTimeout(1000);               // Таймаут удержания: 1000 мс
+    button3ok->setClickTimeout(300);           // Таймаут между кликами: 300 мс
+
+    // Инициализация серийного порта и игрового контроллера
+    Serial.begin(9600);                        // Скорость обмена по Serial: 9600 бод
+    Gamepad.begin();                           // Инициализация игрового контроллера
+
+    // Установка начального состояния системы
+    home();                                    // Переход в главное меню или начальную позицию
+}
+
+/**
+ * @brief Основной цикл программы.
+ * 
+ * Функция вызывается многократно в процессе работы программы. 
+ * Она:
+ * 1. Обрабатывает события кнопок через метод `tick()`.
+ * 2. Проверяет наличие щелчков или обновлений.
+ * 3. Вызывает соответствующую функцию на основе текущего значения `STATUS`.
+ * 4. Проверяет необходимость обновления экрана.
+ * 5. Выполняет чтение данных, если установлен флаг `readflag`.
+ */
+void loop() {
+    if (!updateFirmware){
+        // Обработка кнопок
+        button1Up->tick();
+        button2Down->tick();
+        button3ok->tick();
+
+        // Проверка нажатий кнопок или флага обновления
+        if (button1Up->hasClicks() || button2Down->hasClicks() || button3ok->hasClicks() || update) {
+            update = false; // Сброс флага обновления
+
+            // Выбор действия в зависимости от текущего статуса
+            switch (STATUS) {
+                case 0: home(); break;                // Главный экран
+                case 1: mainFunc(); break;            // Основная функция
+                case 2: callibrationFunc(); break;    // Функция калибровки
+                case 3: adjustmentFunc(); break;      // Настройки
+                case 4: debugFunc(); break;           // Отладка
+                case 5: saveFunc(); break;            // Сохранение
+                default: break;                       // Неизвестный статус (ничего не делаем)
+            }
+        }
+
+        // Обновление экрана, если прошло более 300 мс и установлен флаг `forceUpdate`
+        if (millis() - lastTimeupdate > 300 && forceUpdate) {
+            lastTimeupdate = millis(); // Обновление времени последнего обновления
+            update = true;             // Установка флага обновления
+        }
+
+        // Обработка чтения данных, если установлен флаг
+        if (readflag) {
+            read(); // Вызов функции чтения данных
+        }
+    }
+}
+
+
+
+/**
+ * @brief Считывание и обработка аналоговых входов для руля и педалей.
+ * 
+ * Функция:
+ * 1. Считывает значение энкодера для руля и отображает его в заданном диапазоне.
+ * 2. Считывает аналоговые значения педалей (газ, тормоз, сцепление) и корректирует их 
+ *    на основе настроек (минимум, максимум, калибровочные значения).
+ * 3. Обрабатывает инверсию педалей, если включен флаг `INVERTEDPEDAL`.
+ * 4. Передает обработанные значения в игровой контроллер `Gamepad`.
  */
 void read() {
-    // считываем текущий счетчик энкодера
+    // Считывание текущего значения энкодера (руля)
     int wheelValue = encCount;
-    // отображаем его в указанном диапазоне
-    wheel = map(wheelValue, wheelDec/4, -wheelDec/4, -32768, 32767);
-    // считываем аналоговые значения для педалей
+    wheel = map(wheelValue, wheelDeg / 4, -wheelDeg / 4, -32768, 32767);
+
+    // Считывание аналоговых значений педалей
     int gasValue = analogRead(pinGas);
     int brakeValue = analogRead(pinBrake);
     int clutchValue = analogRead(pinClutch);
-    // корректируем значения педалей на основе их настроек
+    Serial.println(gasValue);
+
+    // Корректировка значений педалей с учетом калибровочных настроек
     pedalGas = map(gasValue, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
     pedalBrake = map(brakeValue, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
     pedalClutch = map(clutchValue, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
-    // если педали инвертированы, инвертируем их значения
+
+    // Инверсия значений педалей, если включен режим инверсии
     if (INVERTEDPEDAL) {
         pedalGas = -pedalGas;
         pedalBrake = -pedalBrake;
         pedalClutch = -pedalClutch;
     }
-    // отображаем полученные значения на Gamepad
-    Gamepad.xAxis(wheel);
-    Gamepad.rxAxis(pedalGas);
-    Gamepad.ryAxis(pedalBrake);
-    Gamepad.rzAxis(pedalClutch);
-    // отправляем данные на Gamepad
+
+    // Передача значений в игровой контроллер
+    Gamepad.xAxis(wheel);        // Управление осью X (руль)
+    Gamepad.rxAxis(pedalGas);    // Управление осью RX (газ)
+    Gamepad.ryAxis(pedalBrake);  // Управление осью RY (тормоз)
+    Gamepad.rzAxis(pedalClutch); // Управление осью RZ (сцепление)
+
+    // Отправка данных игровому контроллеру
     Gamepad.write();
 }
 
 
 /**
-* @brief Главное меню устройства.
-*
-* Эта функция вызывается при первом включении устройства или когда пользователь
-* нажимает кнопку «ОК» из любого другого меню.
-*
-* Функция отображает меню с пятью опциями: «ГЛАВНАЯ», «КАЛИБРОВКА»,
-* «НАСТРОЙКА», «ОТЛАДКА» и «СОХРАНЕНИЕ». Пользователь может использовать кнопки вверх и вниз
-* для навигации по меню и кнопку «ОК» для выбора опции.
-*
-* Функция также обрабатывает логику навигации по меню и выбора
-* опции. Когда опция выбрана, функция вызывает соответствующую
-* функцию: mainFunc(), callibrationFunc(), adjustmentFunc(), debugFunc() или
-* saveFunc().
-*
-* Функция использует глобальную переменную STATUS для отслеживания текущего
-* выбора меню.
-*/
+ * @brief Главное меню устройства.
+ *
+ * Функция отображает меню с пятью опциями:
+ * 1. MAIN - Главная функция
+ * 2. CALLIBRATION - Калибровка устройства
+ * 3. ADJUSTMENT - Настройка параметров
+ * 4. DEBUG - Режим отладки
+ * 5. SAVE - Сохранение данных
+ *
+ * Пользователь может:
+ * - Использовать кнопки Вверх и Вниз для навигации.
+ * - Нажать кнопку "OK" для выбора опции.
+ * 
+ * При выборе опции вызывается соответствующая функция, 
+ * а переменная `STATUS` обновляется для отслеживания текущего состояния.
+ */
 void home() {
-    display.clearDisplay(); // Очистка дисплея перед отрисовкой нового меню
+    // Очистка дисплея перед отрисовкой нового меню
+    display.clearDisplay();
 
-    // Массив строк меню
+    // Массив пунктов меню
     const char* menuItems[] = {
         "  MAIN",         // Главная функция
-        "  CALLIBRATION", // Калибровка устройства
-        "  ADJUSTMENT",   // Настройка параметров
-        "  DEBUG",        // Режим отладки
-        "  SAVE"          // Сохранение данных
+        "  CALLIBRATION", // Калибровка
+        "  ADJUSTMENT",   // Настройка
+        "  DEBUG",        // Отладка
+        "  SAVE"          // Сохранение
     };
 
-    // Отрисовка меню
+    // Отрисовка всех пунктов меню
     for (int i = 0; i < 5; i++) {
-        display.setCursor(0, i * 9); // Установка позиции курсора для каждой строки
+        display.setCursor(0, i * 9); // Установка позиции курсора для строки
         display.print(menuItems[i]); // Вывод текста меню
     }
 
-    // Управление курсором
-    if (button2Down->isSingle()) { // Если кнопка вниз нажата
-        CursorPos = (CursorPos + 1) % 5; // Перемещение курсора вниз с циклическим переходом
+    // Управление перемещением курсора
+    if (button2Down->isSingle()) { 
+        CursorPos = (CursorPos + 1) % 5; // Перемещение вниз (циклически)
     }
-    if (button1Up->isSingle()) { // Если кнопка вверх нажата
-        CursorPos = (CursorPos - 1 + 5) % 5; // Перемещение курсора вверх с циклическим переходом
+    if (button1Up->isSingle()) { 
+        CursorPos = (CursorPos - 1 + 5) % 5; // Перемещение вверх (циклически)
     }
 
-    // Действия по выбору
-    if (button3ok->isSingle()) { // Если кнопка OK нажата
-        STATUS = CursorPos + 1; // Установка статуса в соответствии с позицией курсора
-        if (STATUS == 3) { // Специальный случай для НАСТРОЙКИ
-            adjustmentStatus = -1; // Сброс статуса настройки
+    // Обработка выбора пункта меню
+    if (button3ok->isSingle()) { 
+        STATUS = CursorPos + 1; // Установка статуса в зависимости от позиции курсора
+
+        if (STATUS == 3) { // Если выбрана настройка
+            adjustmentStatus = -1; // Сброс состояния настройки
             CursorPos = 0; // Сброс позиции курсора
         }
     }
 
     // Вызов соответствующей функции на основе текущего статуса
     switch (STATUS) {
-        case 1: mainFunc(); break;        // Вызов основной функции
-        case 2: callibrationFunc(); break; // Вызов функции калибровки
-        case 3: adjustmentFunc(); break;  // Вызов функции настройки
-        case 4: debugFunc(); break;       // Вызов функции отладки
-        case 5: saveFunc(); break;        // Вызов функции сохранения
-        default: break;                   // Ничего не делать по умолчанию
+        case 1: mainFunc(); forceUpdate = true; break;        // Главная функция
+        case 2: callibrationFunc(); forceUpdate = true; break; // Калибровка
+        case 3: adjustmentFunc(); forceUpdate = false; break;  // Настройка
+        case 4: debugFunc(); forceUpdate = true; break;       // Отладка
+        case 5: saveFunc(); forceUpdate = false; break;       // Сохранение
+        default: break; // Ничего не делать, если статус не соответствует пункту меню
     }
 
-    drawCursor(); // Отрисовка курсора на текущей позиции
-    display.display(); // Обновление дисплея для отображения изменений
+    // Отрисовка текущей позиции курсора
+    drawCursor();
+
+    // Обновление дисплея для применения изменений
+    display.display();
 }
 
-
-// Рисуем курсор меню в позиции CursorPos
+/**
+ * @brief Отображает курсор в текущей позиции.
+ *
+ * Функция используется для отрисовки стрелки ">" рядом с пунктом меню, на который указывает `CursorPos`.
+ */
 void drawCursor() {
-  display.setCursor(0, CursorPos*9);
-  display.print("> ");
+    display.setCursor(0, CursorPos * 9); // Установка позиции курсора в строку, соответствующую `CursorPos`
+    display.print("> "); // Отрисовка курсора
 }
 
-//указатель выборва
+/**
+ * @brief Отображает указатель выбора на указанной строке.
+ *
+ * Отрисовывает стрелку "<=" в правой части дисплея, указывая на выбранный пункт.
+ *
+ * @param line Номер строки, где будет отрисован указатель.
+ */
 void drawCursorSelect(int line) {
-  display.setCursor(110, line*9);
-  display.print("<=");   
+    display.setCursor(110, line * 9); // Установка позиции для отображения в правой части строки
+    display.print("<="); // Отрисовка указателя
 }
 
+/**
+ * @brief Главная функция программы.
+ *
+ * Отображает текущие значения педалей (газ, тормоз, сцепление) и руля. 
+ * Обрабатывает двойное нажатие кнопки "OK" для возврата в главное меню.
+ */
 void mainFunc() {
-    display.clearDisplay();
+    display.clearDisplay(); // Очистка дисплея перед обновлением
 
+    // Проверка на двойное нажатие кнопки "OK" для возврата в главное меню
     if (button3ok->isDouble()) {
-        resetStatusAdjustment = false;
+        resetStatusAdjustment = false; // Сброс флага настройки
+        adjustmentStatus = 0;          // Сброс состояния настройки
+        CursorPos = 0;                 // Сброс курсора
+        STATUS = 0;                    // Возврат в главное меню
+        update = true;                 // Установка флага обновления
+        return;
     }
 
+    // Получение текущего значения руля
+    wheel = encCount * 4;
+
+    // Отображение значений педалей и руля
     display.setCursor(0, 0);
     display.print("  GAS:        ");
     display.print(pedalGas);
+
     display.setCursor(0, 9);
     display.print("  BRAKE:      ");
     display.print(pedalBrake);
+
     display.setCursor(0, 18);
     display.print("  CLUTCH:     ");
     display.print(pedalClutch);
+
     display.setCursor(0, 27);
     display.print("  WHEEL:      ");
-    display.print(constrain(wheel, wheelDec, -wheelDec));
+    display.print(wheel);
 
-    display.display();
+    display.display(); // Обновление дисплея
 }
+
+/**
+ * @brief Функция калибровки (пока пустая).
+ *
+ * Здесь будет размещен код для калибровки устройства.
+ */
 void callibrationFunc() {
+    // Здесь добавьте код для реализации калибровки
 }
+
 
 /**
 *Функция регулировки
@@ -274,7 +371,7 @@ void adjustmentFunc() {
     // Обработка состояния
     switch (adjustmentStatus) {
         case 0: { // Основной режим выбора
-            handleCursorMovement(4); // Обработка перемещения курсора в пределах [0-3]
+            handleCursorMovement(6); // Обработка перемещения курсора в пределах [0-3]
 
             if (button3ok->isSingle()) {
                 adjustmentStatus = CursorPos + 1; // Переход к выбранному состоянию
@@ -307,7 +404,16 @@ void adjustmentFunc() {
             processWheelAdjustment();
             break;
         case 5: // Gamepad readflag
-            readflagSwitch();
+            readflag = !readflag;
+            adjustmentStatus = 0;
+            break;
+        case 6: // INVERTEDPEDAL
+            INVERTEDPEDAL = !INVERTEDPEDAL;
+            adjustmentStatus = 0;
+            break;
+        case 7: // updateFirmware
+            updateFirmware = !updateFirmware;
+            break;
         default:
             adjustmentStatus = 0; // Безопасное состояние
             break;
@@ -363,26 +469,6 @@ void handleCursorMovement(int maxIndex) {
     }
 }
 
-/**
-* Функция для переключения флага readflag
-*
-* readflag - глобальный флаг, который отображает состояние
-* возможности считывания данных с потенциометров.
-* Если флаг установлен, то считывание данных
-* происходит. Если флаг сброшен, то считывание
-* данных не происходит.
-*
-* Функция readflagSwitch() переключает значение
-* флага readflag, используя кнопку button3ok.
-* Если кнопка button3ok была нажата, то
-* значение флага readflag изменяется на противоположное.
-*/
-void readflagSwitch() {
-    if (button3ok->isSingle()) {
-        readflag = !readflag; // Переключение флага
-    }
-}
-
 /** 
 * @brief Сбрасывает состояние системы в основное состояние.
 *
@@ -430,7 +516,7 @@ void processWheelAdjustment() {
                             ? (sizeof(wheelValues) / sizeof(wheelValues[0])) - 1
                             : currentWheelIndex - 1;
     }
-    wheelDec = wheelValues[currentWheelIndex];
+    wheelDeg = wheelValues[currentWheelIndex];
     resetStatusAdjustment = true;
 }
 
@@ -445,19 +531,30 @@ void processWheelAdjustment() {
 void displayMenuData() {
     display.setCursor(0, 0);
     display.print("  GAS:        ");
-    display.print(pedalAdjustmentGasMax + " " + pedalAdjustmentGasMin);
+    display.print(pedalAdjustmentGasMax);
+    display.print(" ");
+    display.print(pedalAdjustmentGasMin);
     display.setCursor(0, 9);
     display.print("  BRAKE:      ");
-    display.print(pedalAdjustmentBrakeMax + " " + pedalAdjustmentBrakeMin);
+    display.print(pedalAdjustmentBrakeMax);
+    display.print(" ");
+    display.print(pedalAdjustmentBrakeMin);
     display.setCursor(0, 18);
     display.print("  CLUTCH:     ");
-    display.print(pedalAdjustmentClutchMax + " " + pedalAdjustmentClutchMin);
+    display.print(pedalAdjustmentClutchMax);
+    display.print(" ");
+    display.print(pedalAdjustmentClutchMin);
     display.setCursor(0, 27);
     display.print("  WHEEL:      ");
-    display.print(wheelDec);
+    display.print(wheelDeg);
     display.setCursor(0, 36);
-    display.print("  STATUS:     ");
+    display.print("  READ FLAG:  ");
     display.print(readflag ? "ON" : "OFF");
+    display.setCursor(0, 45);
+    display.print("  INVERTED:   ");
+    display.print(INVERTEDPEDAL ? "ON" : "OFF");
+    display.setCursor(0, 54);
+    display.print("  FLASH MODE: OFF");
     display.display();
 }
 
@@ -488,4 +585,36 @@ void debugFunc() {
 }
 void saveFunc() {
 
+}
+
+void encTick() {
+    bool currentState = digitalRead(encoderPinA); // Чтение текущего состояния пина A энкодера
+    if (currentState != lastState) { // Проверка изменения состояния
+        // В зависимости от типа энкодера, применяем разную логику
+        if (ENC_TYPE == 1) {
+            turnFlag = !turnFlag; // Инвертируем флаг при каждом изменении
+            if (turnFlag) {
+                // Увеличиваем или уменьшаем счетчик в зависимости от состояния пина B
+                encCount += (digitalRead(encoderPinB) != lastState) ? -1 : 1;
+            }
+        } else {
+            // Для другого типа энкодера - просто корректируем счетчик
+            encCount += (digitalRead(encoderPinB) != lastState) ? -1 : 1;
+        }
+        lastState = currentState; // Обновляем предыдущее состояние
+    }
+}
+
+
+// опрос энкодера в прерывании
+ISR(TIMER3_COMPA_vect) {
+  encTick();
+}
+
+// ставим таймер 3, канал А, период 0.5 мс. Для опроса энкодера
+void setupTmr() {
+  TCCR3B = 0b00001001;
+  TIMSK3 = 0b00000010;
+  OCR3AH = highByte(15999 / 2);
+  OCR3AL = lowByte(15999 / 2);
 }

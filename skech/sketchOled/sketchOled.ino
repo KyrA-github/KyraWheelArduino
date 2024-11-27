@@ -74,6 +74,10 @@ int gasMin = 0, gasMax = 1023;        // Диапазон газа
 int brakeMin = 0, brakeMax = 1023;    // Диапазон тормоза
 int clutchMin = 0, clutchMax = 1023;  // Диапазон сцепления
 
+int RawValueGas = 0, RawValueBrake = 0, RawValueClutch = 0; // Значения педалей в режиме Raw
+
+
+
 
 /**
  * @brief Инициализация системы.
@@ -164,6 +168,10 @@ void loop() {
         if (readflag) {
             read(); // Вызов функции чтения данных
         }
+        // Считывание аналоговых значений педалей
+        RawValueGas = analogRead(pinGas);
+        RawValueBrake = analogRead(pinBrake);
+        RawValueClutch = analogRead(pinClutch);
     }
 }
 
@@ -184,16 +192,10 @@ void read() {
     int wheelValue = encCount;
     wheel = map(wheelValue, wheelDeg / 4, -wheelDeg / 4, -32768, 32767);
 
-    // Считывание аналоговых значений педалей
-    int gasValue = analogRead(pinGas);
-    int brakeValue = analogRead(pinBrake);
-    int clutchValue = analogRead(pinClutch);
-    Serial.println(gasValue);
-
     // Корректировка значений педалей с учетом калибровочных настроек
-    pedalGas = map(gasValue, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
-    pedalBrake = map(brakeValue, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
-    pedalClutch = map(clutchValue, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
+    pedalGas = map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
+    pedalBrake = map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
+    pedalClutch = map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
 
     // Инверсия значений педалей, если включен режим инверсии
     if (INVERTEDPEDAL) {
@@ -354,7 +356,7 @@ void mainFunc() {
  * Здесь будет размещен код для калибровки устройства.
  */
 void callibrationFunc() {
-    // Здесь добавьте код для реализации калибровки
+    
 }
 
 

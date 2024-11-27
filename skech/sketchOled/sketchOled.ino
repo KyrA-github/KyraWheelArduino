@@ -38,6 +38,10 @@ int pedalClutch = 0;   // Значение сцепления
 int wheel = 0;         // Угол поворота руля
 int HShifter = 0;      // Состояние H-образного переключателя передач
 int gear = 0;          // Текущая передача
+int gas = 0, brake, clutch;
+int RawValueGas = 0, RawValueBrake = 0, RawValueClutch = 0; // Значения педалей в режиме Raw
+int resetValueGas = 0;
+
 
 // Переменные для энкодера
 volatile int encCount = 0;      // Счетчик импульсов энкодера
@@ -61,8 +65,8 @@ int pedalAdjustmentClutchMin = 0, pedalAdjustmentClutchMax = 0;  // Сцепле
 
 // Статусы и флаги
 int STATUS = 0;                    // Текущий статус системы
-int adjustmentStatus = 0;          // Статус калибровки педалей
-int adjustmentLowStatus = 0;       // Статус нижнего значения калибровки
+int miniStatus = 0;          // Статус калибровки педалей
+int microStatus = 0;       // Статус нижнего значения калибровки
 bool resetStatusAdjustment = false; // Флаг сброса статусов калибровки
 bool update = false;               // Флаг обновления состояния
 bool updateFirmware = false;               // Флаг обновления прошивки
@@ -73,9 +77,6 @@ bool INVERTEDPEDAL = false;        // Флаг инверсии педалей
 int gasMin = 0, gasMax = 1023;        // Диапазон газа
 int brakeMin = 0, brakeMax = 1023;    // Диапазон тормоза
 int clutchMin = 0, clutchMax = 1023;  // Диапазон сцепления
-
-int RawValueGas = 0, RawValueBrake = 0, RawValueClutch = 0; // Значения педалей в режиме Raw
-
 
 
 
@@ -119,7 +120,7 @@ void setup() {
     // Инициализация серийного порта и игрового контроллера
     Serial.begin(9600);                        // Скорость обмена по Serial: 9600 бод
     Gamepad.begin();                           // Инициализация игрового контроллера
-
+    loadFunc();
     // Установка начального состояния системы
     home();                                    // Переход в главное меню или начальную позицию
 }
@@ -159,7 +160,7 @@ void loop() {
         }
 
         // Обновление экрана, если прошло более 300 мс и установлен флаг `forceUpdate`
-        if (millis() - lastTimeupdate > 300 && forceUpdate) {
+        if (millis() - lastTimeupdate > 1000 && forceUpdate) {
             lastTimeupdate = millis(); // Обновление времени последнего обновления
             update = true;             // Установка флага обновления
         }
@@ -189,26 +190,35 @@ void loop() {
  */
 void read() {
     // Считывание текущего значения энкодера (руля)
-    int wheelValue = encCount;
+    int wheelValue = -encCount;
     wheel = map(wheelValue, wheelDeg / 4, -wheelDeg / 4, -32768, 32767);
 
     // Корректировка значений педалей с учетом калибровочных настроек
-    pedalGas = map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
-    pedalBrake = map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
-    pedalClutch = map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
+    // pedalGas = map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
+    // pedalBrake = map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
+    // pedalClutch = map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
 
+    // Корректировка значений педалей с учетом калибровочных настроек
+    //переводим в формат 
+    resetValueGas = gas;
+    gas = -constrain(map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -32765, 32765), -32768, 32767);
+    brake = constrain(map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127), -128, 127);
+    clutch = constrain(map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127), -128, 127);
+ 
+
+    //Serial.print("gas: "); Serial.print(gas); Serial.print(" brake: "); Serial.print(brake); Serial.print(" clutch: "); Serial.println(clutch);
     // Инверсия значений педалей, если включен режим инверсии
     if (INVERTEDPEDAL) {
-        pedalGas = -pedalGas;
-        pedalBrake = -pedalBrake;
-        pedalClutch = -pedalClutch;
+        pedalGas = -gas;
+        pedalBrake = -brake;
+        pedalClutch = -clutch;
     }
 
     // Передача значений в игровой контроллер
-    Gamepad.xAxis(wheel);        // Управление осью X (руль)
-    Gamepad.rxAxis(pedalGas);    // Управление осью RX (газ)
-    Gamepad.ryAxis(pedalBrake);  // Управление осью RY (тормоз)
-    Gamepad.rzAxis(pedalClutch); // Управление осью RZ (сцепление)
+    Gamepad.xAxis(wheel);
+    Gamepad.yAxis(gas);
+    Gamepad.ryAxis(brake);
+    Gamepad.rzAxis(clutch);
 
     // Отправка данных игровому контроллеру
     Gamepad.write();
@@ -264,15 +274,20 @@ void home() {
         STATUS = CursorPos + 1; // Установка статуса в зависимости от позиции курсора
 
         if (STATUS == 3) { // Если выбрана настройка
-            adjustmentStatus = -1; // Сброс состояния настройки
+            miniStatus = -1; // Сброс состояния настройки
+            CursorPos = 0; // Сброс позиции курсора
+        }
+
+        if (STATUS == 2) { // Если выбран режим отладки
+            miniStatus = -1; // Сброс состояния настройки
             CursorPos = 0; // Сброс позиции курсора
         }
     }
 
     // Вызов соответствующей функции на основе текущего статуса
     switch (STATUS) {
-        case 1: mainFunc(); forceUpdate = true; break;        // Главная функция
-        case 2: callibrationFunc(); forceUpdate = true; break; // Калибровка
+        case 1: mainFunc(); forceUpdate = false; break;        // Главная функция
+        case 2: callibrationFunc(); forceUpdate = false; break; // Калибровка
         case 3: adjustmentFunc(); forceUpdate = false; break;  // Настройка
         case 4: debugFunc(); forceUpdate = true; break;       // Отладка
         case 5: saveFunc(); forceUpdate = false; break;       // Сохранение
@@ -304,8 +319,10 @@ void drawCursor() {
  * @param line Номер строки, где будет отрисован указатель.
  */
 void drawCursorSelect(int line) {
-    display.setCursor(110, line * 9); // Установка позиции для отображения в правой части строки
-    display.print("<="); // Отрисовка указателя
+    // display.setCursor(110, line * 9); // Установка позиции для отображения в правой части строки
+    // display.print("<="); // Отрисовка указателя
+    display.setCursor(0, CursorPos * 9); // Установка позиции курсора в строку, соответствующую `CursorPos`
+    display.print(" >"); // Отрисовка курсора
 }
 
 /**
@@ -320,7 +337,7 @@ void mainFunc() {
     // Проверка на двойное нажатие кнопки "OK" для возврата в главное меню
     if (button3ok->isDouble()) {
         resetStatusAdjustment = false; // Сброс флага настройки
-        adjustmentStatus = 0;          // Сброс состояния настройки
+        miniStatus = 0;          // Сброс состояния настройки
         CursorPos = 0;                 // Сброс курсора
         STATUS = 0;                    // Возврат в главное меню
         update = true;                 // Установка флага обновления
@@ -356,7 +373,96 @@ void mainFunc() {
  * Здесь будет размещен код для калибровки устройства.
  */
 void callibrationFunc() {
+    display.clearDisplay();
+
+    // Обработка состояния
+    switch (miniStatus) {
+        case 0: { // Основной режим выбора
+            handleCursorMovement(2); // Обработка перемещения курсора в пределах [0-3]
+
+            if (button3ok->isSingle()) {
+                miniStatus = CursorPos + 1; // Переход к выбранному состоянию
+            }
+            if (button3ok->isDouble()) { // Выход
+                resetToMainStatus();
+                return;
+            }
+            break;
+        }
+        case 1: // GAS
+            if (microStatus == 0){
+                if (button3ok->isSingle()) {
+                    gasMax = RawValueGas;
+                };
+            }
+            else{
+                if (button3ok->isSingle()) {
+                    gasMin = RawValueGas;
+                };
+            }
+            resetStatusAdjustment = true;
+            break;
+        case 2: // BRAKE
+            if (microStatus == 0){
+                if (button3ok->isSingle()) {
+                    brakeMax = RawValueBrake;
+                };
+            }
+            else{
+                if (button3ok->isSingle()) {
+                    brakeMin = RawValueBrake;
+                };
+            }
+            resetStatusAdjustment = true;
+            break;
+        case 3: // CLUTCH
+            if (microStatus == 0){
+                if (button3ok->isSingle()) {
+                    clutchMax = RawValueClutch;
+                };
+            }
+            else{
+                if (button3ok->isSingle()) {
+                    clutchMin = RawValueClutch;
+                };
+            }
+            resetStatusAdjustment = true;
+            break;
+        default:
+            miniStatus = 0; // Безопасное состояние
+            break;
+    }
     
+
+    // Возврат к основному режиму
+    if ((miniStatus == 1 || miniStatus == 2 || miniStatus == 3) && resetStatusAdjustment) {
+        if (button3ok->isSingle()) {
+            if (microStatus == 0){
+                microStatus = 1;
+            } else {
+                microStatus = 0;
+                miniStatus = 0;
+            }      
+            resetStatusAdjustment = false;
+        }
+    }
+    // Возврат к основному режиму
+    if ((miniStatus == 4 || miniStatus == 5) && resetStatusAdjustment) {
+        if (button3ok->isSingle()) {
+            microStatus = 0;
+            miniStatus = 0;
+            resetStatusAdjustment = false;
+        }
+    }
+
+    // Отрисовка данных на экране
+    displayMenuDataCallibration();
+    drawCursor();
+    if (miniStatus != 0) {
+        drawCursorSelect(CursorPos);
+    }
+
+    display.display();
 }
 
 
@@ -371,12 +477,12 @@ void adjustmentFunc() {
     display.clearDisplay();
 
     // Обработка состояния
-    switch (adjustmentStatus) {
+    switch (miniStatus) {
         case 0: { // Основной режим выбора
             handleCursorMovement(6); // Обработка перемещения курсора в пределах [0-3]
 
             if (button3ok->isSingle()) {
-                adjustmentStatus = CursorPos + 1; // Переход к выбранному состоянию
+                miniStatus = CursorPos + 1; // Переход к выбранному состоянию
             }
             if (button3ok->isDouble()) { // Выход
                 resetToMainStatus();
@@ -385,19 +491,19 @@ void adjustmentFunc() {
             break;
         }
         case 1: // GAS
-            if (adjustmentLowStatus == 0)
+            if (microStatus == 0)
                 processPedalAdjustment(pedalAdjustmentGasMax);
             else
                 processPedalAdjustment(pedalAdjustmentGasMin);
             break;
         case 2: // BRAKE
-            if (adjustmentLowStatus == 0)
+            if (microStatus == 0)
                 processPedalAdjustment(pedalAdjustmentBrakeMax);
             else
                 processPedalAdjustment(pedalAdjustmentBrakeMin);
             break;
         case 3: // CLUTCH
-            if (adjustmentLowStatus == 0)
+            if (microStatus == 0)
                 processPedalAdjustment(pedalAdjustmentClutchMax);
             else
                 processPedalAdjustment(pedalAdjustmentClutchMin);
@@ -407,38 +513,38 @@ void adjustmentFunc() {
             break;
         case 5: // Gamepad readflag
             readflag = !readflag;
-            adjustmentStatus = 0;
+            miniStatus = 0;
             break;
         case 6: // INVERTEDPEDAL
             INVERTEDPEDAL = !INVERTEDPEDAL;
-            adjustmentStatus = 0;
+            miniStatus = 0;
             break;
         case 7: // updateFirmware
             updateFirmware = !updateFirmware;
             break;
         default:
-            adjustmentStatus = 0; // Безопасное состояние
+            miniStatus = 0; // Безопасное состояние
             break;
     }
     
 
     // Возврат к основному режиму
-    if ((adjustmentStatus == 1 || adjustmentStatus == 2 || adjustmentStatus == 3) && resetStatusAdjustment) {
+    if ((miniStatus == 1 || miniStatus == 2 || miniStatus == 3) && resetStatusAdjustment) {
         if (button3ok->isSingle()) {
-            if (adjustmentLowStatus == 0){
-                adjustmentLowStatus = 1;
+            if (microStatus == 0){
+                microStatus = 1;
             } else {
-                adjustmentLowStatus = 0;
-                adjustmentStatus = 0;
+                microStatus = 0;
+                miniStatus = 0;
             }      
             resetStatusAdjustment = false;
         }
     }
     // Возврат к основному режиму
-    if ((adjustmentStatus == 4 || adjustmentStatus == 5) && resetStatusAdjustment) {
+    if ((miniStatus == 4 || miniStatus == 5) && resetStatusAdjustment) {
         if (button3ok->isSingle()) {
-            adjustmentLowStatus = 0;
-            adjustmentStatus = 0;
+            microStatus = 0;
+            miniStatus = 0;
             resetStatusAdjustment = false;
         }
     }
@@ -446,7 +552,7 @@ void adjustmentFunc() {
     // Отрисовка данных на экране
     displayMenuData();
     drawCursor();
-    if (adjustmentStatus != 0) {
+    if (miniStatus != 0) {
         drawCursorSelect(CursorPos);
     }
 
@@ -482,7 +588,8 @@ void handleCursorMovement(int maxIndex) {
 void resetToMainStatus() {
     STATUS = 0;
     CursorPos = 0;
-    adjustmentStatus = -1;
+    miniStatus = -1;
+    microStatus = 0;
     update = true;
 
 }
@@ -560,6 +667,25 @@ void displayMenuData() {
     display.display();
 }
 
+void displayMenuDataCallibration() {
+    display.setCursor(0, 0);
+    display.print("  GAS:        ");
+    display.print(gasMax);
+    display.print(" ");
+    display.print(gasMin);
+    display.setCursor(0, 9);
+    display.print("  BRAKE:      ");
+    display.print(brakeMax);
+    display.print(" ");
+    display.print(brakeMin);
+    display.setCursor(0, 18);
+    display.print("  CLUTCH:     ");
+    display.print(clutchMax);
+    display.print(" ");
+    display.print(clutchMin);
+    display.display();
+}
+
 /**
 * @brief Увеличить или уменьшить заданное значение с помощью кнопок
 *
@@ -586,7 +712,41 @@ void debugFunc() {
   
 }
 void saveFunc() {
+    EEPROM.put(0, gasMax);
+    EEPROM.put(2, brakeMax);
+    EEPROM.put(4, clutchMax);
+    EEPROM.put(6, gasMin);
+    EEPROM.put(8, brakeMin);
+    EEPROM.put(10, clutchMin);
+    EEPROM.put(12, wheelDeg);
+    EEPROM.put(14, INVERTEDPEDAL);
+    EEPROM.put(16, readflag);
+    EEPROM.put(18, pedalAdjustmentGasMax);
+    EEPROM.put(20, pedalAdjustmentGasMin);
+    EEPROM.put(22, pedalAdjustmentBrakeMax);
+    EEPROM.put(24, pedalAdjustmentBrakeMin);
+    EEPROM.put(26, pedalAdjustmentClutchMax);
+    EEPROM.put(28, pedalAdjustmentClutchMin);
+    resetToMainStatus();
+    return;
+}
 
+void loadFunc() {
+  EEPROM.get(0, gasMax);
+  EEPROM.get(2, brakeMax);
+  EEPROM.get(4, clutchMax);
+  EEPROM.get(6, gasMin);
+  EEPROM.get(8, brakeMin);
+  EEPROM.get(10, clutchMin);
+  EEPROM.get(12, wheelDeg);
+  EEPROM.get(14, INVERTEDPEDAL);
+  EEPROM.get(16, readflag);
+  EEPROM.get(18, pedalAdjustmentGasMax);
+  EEPROM.get(20, pedalAdjustmentGasMin);
+  EEPROM.get(22, pedalAdjustmentBrakeMax);
+  EEPROM.get(24, pedalAdjustmentBrakeMin);
+  EEPROM.get(26, pedalAdjustmentClutchMax);
+  EEPROM.get(28, pedalAdjustmentClutchMin);
 }
 
 void encTick() {

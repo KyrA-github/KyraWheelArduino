@@ -71,7 +71,7 @@ bool resetStatusAdjustment = false; // Флаг сброса статусов к
 bool update = false;               // Флаг обновления состояния
 bool updateFirmware = false;               // Флаг обновления прошивки
 bool readflag = false;             // Флаг чтения данных
-bool INVERTEDPEDAL = false;        // Флаг инверсии педалей
+bool modeZeroToMax = false;        // Флаг инверсии педалей
 
 // Диапазоны педалей (минимальные и максимальные значения)
 int gasMin = 0, gasMax = 1023;        // Диапазон газа
@@ -190,29 +190,33 @@ void loop() {
  */
 void read() {
     // Считывание текущего значения энкодера (руля)
-    int wheelValue = -encCount;
-    wheel = map(wheelValue, wheelDeg / 4, -wheelDeg / 4, -32768, 32767);
+    // Считывание текущего значения энкодера (руля)
+    int wheelValue = encCount;
+    if (modeZeroToMax) {
+        // Режим от 0 до макс
+        wheelValue = constrain(wheelValue, 0, wheelDeg / 2); // Ограничиваем от 0 до половины диапазона
+        wheel = map(wheelValue, 0, wheelDeg / 2, 0, 32767);  // Преобразование в диапазон [0, 32767]
+    } else {
+        // Режим -макс до макс
+        wheelValue = constrain(wheelValue, -wheelDeg / 4, wheelDeg / 4); // Ограничиваем значение
+        wheel = map(wheelValue, -wheelDeg / 4, wheelDeg / 4, -32768, 32767); // Преобразование
+    }
 
-    // Корректировка значений педалей с учетом калибровочных настроек
-    // pedalGas = map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -128, 127);
-    // pedalBrake = map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127);
-    // pedalClutch = map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127);
-
-    // Корректировка значений педалей с учетом калибровочных настроек
-    //переводим в формат 
-    resetValueGas = gas;
-    gas = -constrain(map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -32765, 32765), -32768, 32767);
-    brake = constrain(map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127), -128, 127);
-    clutch = constrain(map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127), -128, 127);
- 
+    // Корректировка значений педалей
+    if (modeZeroToMax) {
+        // Режим от 0 до макс
+        gas = constrain(map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, 0, 32767), 0, 32767);
+        brake = constrain(map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, 0, 127), 0, 127);
+        clutch = constrain(map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, 0, 127), 0, 127);
+    } else {
+        // Режим -макс до макс
+        gas = constrain(map(RawValueGas, gasMin - pedalAdjustmentGasMin, gasMax + pedalAdjustmentGasMax, -32765, 32765), -32768, 32767);
+        brake = constrain(map(RawValueBrake, brakeMin - pedalAdjustmentBrakeMin, brakeMax + pedalAdjustmentBrakeMax, -128, 127), -128, 127);
+        clutch = constrain(map(RawValueClutch, clutchMin - pedalAdjustmentClutchMin, clutchMax + pedalAdjustmentClutchMax, -128, 127), -128, 127);
+    }
 
     //Serial.print("gas: "); Serial.print(gas); Serial.print(" brake: "); Serial.print(brake); Serial.print(" clutch: "); Serial.println(clutch);
-    // Инверсия значений педалей, если включен режим инверсии
-    if (INVERTEDPEDAL) {
-        pedalGas = -gas;
-        pedalBrake = -brake;
-        pedalClutch = -clutch;
-    }
+    
 
     // Передача значений в игровой контроллер
     Gamepad.xAxis(wheel);
@@ -342,6 +346,9 @@ void mainFunc() {
         STATUS = 0;                    // Возврат в главное меню
         update = true;                 // Установка флага обновления
         return;
+    }
+    if (button3ok->isSingle()) {
+        encCount = 0; // Сброс счетчика рулей
     }
 
     // Получение текущего значения руля
@@ -515,8 +522,8 @@ void adjustmentFunc() {
             readflag = !readflag;
             miniStatus = 0;
             break;
-        case 6: // INVERTEDPEDAL
-            INVERTEDPEDAL = !INVERTEDPEDAL;
+        case 6: // modeZeroToMax
+            modeZeroToMax = !modeZeroToMax;
             miniStatus = 0;
             break;
         case 7: // updateFirmware
@@ -661,7 +668,7 @@ void displayMenuData() {
     display.print(readflag ? "ON" : "OFF");
     display.setCursor(0, 45);
     display.print("  INVERTED:   ");
-    display.print(INVERTEDPEDAL ? "ON" : "OFF");
+    display.print(modeZeroToMax ? "ON" : "OFF");
     display.setCursor(0, 54);
     display.print("  FLASH MODE: OFF");
     display.display();
@@ -719,7 +726,7 @@ void saveFunc() {
     EEPROM.put(8, brakeMin);
     EEPROM.put(10, clutchMin);
     EEPROM.put(12, wheelDeg);
-    EEPROM.put(14, INVERTEDPEDAL);
+    EEPROM.put(14, modeZeroToMax);
     EEPROM.put(16, readflag);
     EEPROM.put(18, pedalAdjustmentGasMax);
     EEPROM.put(20, pedalAdjustmentGasMin);
@@ -739,7 +746,7 @@ void loadFunc() {
   EEPROM.get(8, brakeMin);
   EEPROM.get(10, clutchMin);
   EEPROM.get(12, wheelDeg);
-  EEPROM.get(14, INVERTEDPEDAL);
+  EEPROM.get(14, modeZeroToMax);
   EEPROM.get(16, readflag);
   EEPROM.get(18, pedalAdjustmentGasMax);
   EEPROM.get(20, pedalAdjustmentGasMin);
